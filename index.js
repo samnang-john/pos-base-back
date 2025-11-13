@@ -7,6 +7,7 @@ import route from "./route/typeOfWoodRoute.js";
 import endGrainOfWoodRoute from "./route/endGrainOfWoodRoute.js";
 import lengthOfWoodRoute from "./route/lengthOfWoodRoute.js";
 import productRoute from "./route/productRoute.js";
+import userRoute from "./route/userRoute.js";
 
 const app = express();
 
@@ -23,6 +24,7 @@ app.use("/api/type-of-wood", route);
 app.use("/api/end-grain-of-wood", endGrainOfWoodRoute);
 app.use("/api/length-of-wood", lengthOfWoodRoute);
 app.use("/api/product", productRoute);
+app.use("/api/user", userRoute);
 
 const PORT = process.env.PORT || 5000;
 const MONGOURL = process.env.MONGO_URL;
