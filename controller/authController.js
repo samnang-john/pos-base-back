@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../model/userModel.js";
 import dotenv from "dotenv";
+import BlacklistedToken from "../model/blacklistModel.js";
 dotenv.config();
 
 export const login = async (req, res) => {
@@ -29,8 +30,24 @@ export const login = async (req, res) => {
   }
 };
 
-export const logout = (req, res) => {
-  res.status(200).json({ message: "Logout successful (token must be removed client-side)" });
+export const logout = async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(400).json({ message: "No token provided" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    const decoded = jwt.decode(token);
+    const expiresAt = new Date(decoded.exp * 1000);
+
+    await BlacklistedToken.create({ token, expiresAt });
+
+    res.status(200).json({ message: "Logout successful" });
+  } catch (e) {
+    console.error("Logout error:", e);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
 };
 
 export const me = async (req, res) => {
