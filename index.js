@@ -10,6 +10,7 @@ import productRoute from "./route/productRoute.js";
 import userRoute from "./route/userRoute.js";
 import authRoute from "./route/authRoute.js";
 import { authenticate } from "./middleware/authMiddleware.js";
+import orderRoute from "./route/orderRoute.js";
 
 const app = express();
 
@@ -28,6 +29,7 @@ app.use("/api/length-of-wood", authenticate, lengthOfWoodRoute);
 app.use("/api/product", authenticate, productRoute);
 app.use("/api/user", authenticate, userRoute);
 app.use("/api/auth", authRoute);
+app.use("/api/order", orderRoute);
 
 const PORT = process.env.PORT || 5000;
 const MONGOURL = process.env.MONGO_URL;
