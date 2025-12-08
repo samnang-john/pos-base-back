@@ -14,15 +14,29 @@ export const createOrder = async (req, res) => {
             return res.status(400).json({ message: "Order items are required" });
         }
 
-        // 1️⃣ Calculate subtotal from item list
         let subtotal = 0;
         const orderItemsToInsert = [];
 
+        // 1️⃣ LOOP THROUGH ITEMS
         for (const item of items) {
-            const product = await Products.findById(item.product_id);
+            if (!item.product_id || !item.quantity) {
+                throw new Error("Invalid item structure");
+            }
+
+            // 2️⃣ ATOMIC STOCK UPDATE (Best Practice)
+            const product = await Products.findOneAndUpdate(
+                {
+                    _id: item.product_id,
+                    number_of_wood: { $gte: item.quantity } // ensure enough stock
+                },
+                {
+                    $inc: { number_of_wood: -item.quantity } // deduct stock atomically
+                },
+                { new: true, session }
+            );
 
             if (!product) {
-                throw new Error(`Product not found: ${item.product_id}`);
+                throw new Error(`Not enough stock or product not found: ${item.product_id}`);
             }
 
             const price = product.price_of_each;
@@ -33,19 +47,19 @@ export const createOrder = async (req, res) => {
             orderItemsToInsert.push({
                 product_id: product._id,
                 quantity: item.quantity,
-                price: price,
-                total: total
+                price,
+                total
             });
         }
 
-        // 2️⃣ Calculate grand total
+        // 3️⃣ Calculate grand total
         const grandTotal = subtotal - discount + tax;
 
-        // 3️⃣ Create order number
-        const orderNumber = "INV-" + Date.now(); // simple unique number
+        // 4️⃣ Generate invoice number
+        const orderNumber = "INV-" + Date.now();
 
-        // 4️⃣ Insert main order
-        const order = await Orders.create([{
+        // 5️⃣ Create main order
+        const [order] = await Orders.create([{
             order_number: orderNumber,
             customer,
             subtotal,
@@ -55,20 +69,22 @@ export const createOrder = async (req, res) => {
             payment_status: "paid"
         }], { session });
 
-        const orderId = order[0]._id;
+        // 6️⃣ Attach order ID to each item
+        const formattedItems = orderItemsToInsert.map(item => ({
+            ...item,
+            order_id: order._id
+        }));
 
-        // 5️⃣ Insert order items
-        const formattedItems = orderItemsToInsert.map(x => ({ ...x, order_id: orderId }));
-
+        // 7️⃣ Insert order items
         await OrderItems.insertMany(formattedItems, { session });
 
-        // 6️⃣ Commit transaction
+        // 8️⃣ Commit transaction
         await session.commitTransaction();
         session.endSession();
 
         return res.status(201).json({
             message: "Order created successfully",
-            order: order[0],
+            order,
             items: formattedItems
         });
 
@@ -77,6 +93,8 @@ export const createOrder = async (req, res) => {
         session.endSession();
 
         console.error("Order creation error:", error);
-        return res.status(500).json({ message: error.message || "Something went wrong" });
+        return res.status(500).json({
+            message: error.message || "Something went wrong"
+        });
     }
 };
