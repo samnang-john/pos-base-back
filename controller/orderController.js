@@ -98,3 +98,70 @@ export const createOrder = async (req, res) => {
         });
     }
 };
+
+export const listOrders = async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const size = parseInt(req.query.size) || 10;
+        const { startDate, endDate } = req.query;
+
+        const skip = (page - 1) * size;
+
+        const matchStage = {};
+
+        // ✅ Optional date filter
+        if (startDate && endDate) {
+            const start = new Date(startDate);
+            start.setHours(0, 0, 0, 0);
+
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999);
+
+            matchStage.createdAt = {
+                $gte: start,
+                $lte: end
+            };
+        }
+
+        // ✅ Total items (for pagination)
+        const totalItems = await Orders.countDocuments(matchStage);
+
+        // ✅ Aggregation for order + items
+        const orders = await Orders.aggregate([
+            { $match: matchStage },
+            { $sort: { createdAt: -1 } },
+            { $skip: skip },
+            { $limit: size },
+            {
+                $lookup: {
+                    from: "order_items",
+                    localField: "_id",
+                    foreignField: "order_id",
+                    as: "items"
+                }
+            }
+        ]);
+
+        res.status(200).json({
+            message: "Order list retrieved successfully",
+            code: 200,
+            data: {
+                items: orders,
+                pagination: {
+                    currentPage: page,
+                    pageSize: size,
+                    totalItems,
+                    totalPages: Math.ceil(totalItems / size)
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error("Error fetching order list", error);
+        res.status(500).json({
+            message: "Internal Server Error",
+            code: 500,
+            data: []
+        });
+    }
+};
