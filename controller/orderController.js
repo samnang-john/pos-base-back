@@ -2,6 +2,7 @@ import Orders from "../model/orderModel.js";
 import OrderItems from "../model/orderItemModel.js";
 import Products from "../model/productModel.js";
 import mongoose from "mongoose";
+import { generateOrderReportPDF } from "../util/orderPdf.js";
 
 export const createOrder = async (req, res) => {
     const session = await mongoose.startSession();
@@ -163,5 +164,50 @@ export const listOrders = async (req, res) => {
             code: 500,
             data: []
         });
+    }
+};
+
+export const downloadOrdersReportPDF = async (req, res) => {
+    try {
+        const { startDate, endDate } = req.query;
+
+        const matchStage = {};
+
+        if (startDate && endDate) {
+            const start = new Date(startDate);
+            start.setHours(0, 0, 0, 0);
+
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999);
+
+            matchStage.createdAt = {
+                $gte: start,
+                $lte: end
+            };
+        }
+
+        // Get orders with items
+        const orders = await Orders.aggregate([
+            { $match: matchStage },
+            { $sort: { createdAt: -1 } },
+            {
+                $lookup: {
+                    from: "order_items",
+                    localField: "_id",
+                    foreignField: "order_id",
+                    as: "items"
+                }
+            }
+        ]);
+
+        if (!orders.length) {
+            return res.status(404).json({ message: "No orders found" });
+        }
+
+        generateOrderReportPDF(res, orders, { startDate, endDate });
+
+    } catch (error) {
+        console.error("Order report PDF error:", error);
+        res.status(500).json({ message: "Failed to generate order report PDF" });
     }
 };
