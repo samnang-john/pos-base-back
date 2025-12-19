@@ -3,6 +3,7 @@ import OrderItems from "../model/orderItemModel.js";
 import Products from "../model/productModel.js";
 import mongoose from "mongoose";
 import { generateOrderReportPDF } from "../util/orderPdf.js";
+import { generateOrderReportExcel } from "../util/orderExcel.js";
 
 export const createOrder = async (req, res) => {
     const session = await mongoose.startSession();
@@ -209,5 +210,49 @@ export const downloadOrdersReportPDF = async (req, res) => {
     } catch (error) {
         console.error("Order report PDF error:", error);
         res.status(500).json({ message: "Failed to generate order report PDF" });
+    }
+};
+
+export const downloadOrdersReportExcel = async (req, res) => {
+    try {
+        const { startDate, endDate } = req.query;
+
+        const matchStage = {};
+
+        if (startDate && endDate) {
+            const start = new Date(startDate);
+            start.setHours(0, 0, 0, 0);
+
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999);
+
+            matchStage.createdAt = {
+                $gte: start,
+                $lte: end
+            };
+        }
+
+        const orders = await Orders.aggregate([
+            { $match: matchStage },
+            { $sort: { createdAt: -1 } },
+            {
+                $lookup: {
+                    from: "order_items",
+                    localField: "_id",
+                    foreignField: "order_id",
+                    as: "items"
+                }
+            }
+        ]);
+
+        if (!orders.length) {
+            return res.status(404).json({ message: "No orders found" });
+        }
+
+        await generateOrderReportExcel(res, orders, { startDate, endDate });
+
+    } catch (error) {
+        console.error("Order Excel report error:", error);
+        res.status(500).json({ message: "Failed to generate Excel report" });
     }
 };
