@@ -256,3 +256,54 @@ export const downloadOrdersReportExcel = async (req, res) => {
         res.status(500).json({ message: "Failed to generate Excel report" });
     }
 };
+
+export const syncStock = async (req, res) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const { items } = req.body;
+
+        if (!items || items.length === 0) {
+            return res.status(400).json({ message: "Stock items are required" });
+        }
+
+        const updatedProducts = [];
+
+        for (const item of items) {
+            if (!item.product_id || !item.quantity) {
+                throw new Error("Invalid item structure: product_id and quantity required");
+            }
+
+            // increase qty instead of decrease
+            const updatedProduct = await Products.findOneAndUpdate(
+                { _id: item.product_id },
+                { $inc: { number_of_wood: item.quantity } }, // ➕ ADD quantity
+                { new: true, session }
+            );
+
+            if (!updatedProduct) {
+                throw new Error(`Product not found: ${item.product_id}`);
+            }
+
+            updatedProducts.push(updatedProduct);
+        }
+
+        await session.commitTransaction();
+        session.endSession();
+
+        return res.status(200).json({
+            message: "Stock synced successfully",
+            updated_products: updatedProducts
+        });
+
+    } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
+
+        console.error("Sync stock error:", error);
+        return res.status(500).json({
+            message: error.message || "Failed to sync stock"
+        });
+    }
+};
