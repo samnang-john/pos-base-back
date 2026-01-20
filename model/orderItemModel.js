@@ -16,15 +16,21 @@ const orderItemSchema = new mongoose.Schema({
         required: true,
     },
     price: {
-        type: Number, // price per item when sold
+        type: Number,
         required: true,
     },
+    cost: {
+        type: Number,
+        required: true,
+    },
+    discount: {
+        type: Number,
+        default: 0, // item-level discount
+    },
     total: {
-        type: Number, // quantity * price
+        type: Number,
         required: true,
     }
-}, { 
-    timestamps: true 
-});
+}, { timestamps: true });
 
 export default mongoose.model("order_items", orderItemSchema);

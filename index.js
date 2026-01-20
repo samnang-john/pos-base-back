@@ -11,6 +11,7 @@ import productRoute from "./route/productRoute.js";
 import userRoute from "./route/userRoute.js";
 import authRoute from "./route/authRoute.js";
 import orderRoute from "./route/orderRoute.js";
+import syncStockRoute from "./route/syncStockRoute.js";
 import { authenticate } from "./middleware/authMiddleware.js";
 
 const app = express();
@@ -55,6 +56,7 @@ app.use("/api/length-of-wood", authenticate, lengthOfWoodRoute);
 app.use("/api/product", authenticate, productRoute);
 app.use("/api/user", authenticate, userRoute);
 app.use("/api/order", authenticate, orderRoute);
+app.use("/api/stock", authenticate, syncStockRoute);
 
 /* =======================
    SERVER + DB

@@ -4,6 +4,8 @@ import Products from "../model/productModel.js";
 import mongoose from "mongoose";
 import { generateOrderReportPDF } from "../util/orderPdf.js";
 import { generateOrderReportExcel } from "../util/orderExcel.js";
+import StockSync from "../model/stockSyncModel.js";
+import StockSyncItem from "../model/stockSyncItemModel.js";
 
 export const createOrder = async (req, res) => {
     const session = await mongoose.startSession();
@@ -19,20 +21,20 @@ export const createOrder = async (req, res) => {
         let subtotal = 0;
         const orderItemsToInsert = [];
 
-        // 1️⃣ LOOP THROUGH ITEMS
         for (const item of items) {
             if (!item.product_id || !item.quantity) {
                 throw new Error("Invalid item structure");
             }
 
-            // 2️⃣ ATOMIC STOCK UPDATE (Best Practice)
+            const itemDiscount = item.discount || 0;
+
             const product = await Products.findOneAndUpdate(
                 {
                     _id: item.product_id,
-                    number_of_wood: { $gte: item.quantity } // ensure enough stock
+                    number_of_wood: { $gte: item.quantity }
                 },
                 {
-                    $inc: { number_of_wood: -item.quantity } // deduct stock atomically
+                    $inc: { number_of_wood: -item.quantity }
                 },
                 { new: true, session }
             );
@@ -42,7 +44,10 @@ export const createOrder = async (req, res) => {
             }
 
             const price = product.price_of_each;
-            const total = price * item.quantity;
+            const cost = product.cost_of_each;
+
+            // price * qty - item discount
+            const total = (price * item.quantity) - itemDiscount;
 
             subtotal += total;
 
@@ -50,17 +55,17 @@ export const createOrder = async (req, res) => {
                 product_id: product._id,
                 quantity: item.quantity,
                 price,
+                cost,
+                discount: itemDiscount,
                 total
             });
         }
 
-        // 3️⃣ Calculate grand total
+        // order-level discount & tax
         const grandTotal = subtotal - discount + tax;
 
-        // 4️⃣ Generate invoice number
         const orderNumber = "INV-" + Date.now();
 
-        // 5️⃣ Create main order
         const [order] = await Orders.create([{
             order_number: orderNumber,
             customer,
@@ -71,16 +76,13 @@ export const createOrder = async (req, res) => {
             payment_status: "paid"
         }], { session });
 
-        // 6️⃣ Attach order ID to each item
         const formattedItems = orderItemsToInsert.map(item => ({
             ...item,
             order_id: order._id
         }));
 
-        // 7️⃣ Insert order items
         await OrderItems.insertMany(formattedItems, { session });
 
-        // 8️⃣ Commit transaction
         await session.commitTransaction();
         session.endSession();
 
@@ -94,7 +96,6 @@ export const createOrder = async (req, res) => {
         await session.abortTransaction();
         session.endSession();
 
-        console.error("Order creation error:", error);
         return res.status(500).json({
             message: error.message || "Something went wrong"
         });
@@ -262,39 +263,73 @@ export const syncStock = async (req, res) => {
     session.startTransaction();
 
     try {
-        const { items } = req.body;
+        const { items, note } = req.body;
 
         if (!items || items.length === 0) {
             return res.status(400).json({ message: "Stock items are required" });
         }
 
-        const updatedProducts = [];
+        // 1️⃣ Create sync header
+        const syncInvoice = `SYNC-${Date.now()}`;
 
+        const [sync] = await StockSync.create(
+            [{
+                sync_invoice: syncInvoice,
+                note,
+                total_items: items.length
+            }],
+            { session }
+        );
+
+        const syncItems = [];
+
+        // 2️⃣ Loop through items
         for (const item of items) {
             if (!item.product_id || !item.quantity) {
-                throw new Error("Invalid item structure: product_id and quantity required");
+                throw new Error("Invalid item structure");
             }
 
-            // increase qty instead of decrease
-            const updatedProduct = await Products.findOneAndUpdate(
-                { _id: item.product_id },
-                { $inc: { number_of_wood: item.quantity } }, // ➕ ADD quantity
-                { new: true, session }
-            );
-
-            if (!updatedProduct) {
+            // 3️⃣ Get product (inside transaction)
+            const product = await Products.findById(item.product_id).session(session);
+            if (!product) {
                 throw new Error(`Product not found: ${item.product_id}`);
             }
 
-            updatedProducts.push(updatedProduct);
+            const beforeQty = product.number_of_wood;
+            const afterQty = beforeQty + item.quantity;
+
+            // 4️⃣ Update stock
+            await Products.updateOne(
+                { _id: item.product_id },
+                { $inc: { number_of_wood: item.quantity } },
+                { session }
+            );
+
+            // 5️⃣ Prepare sync item (IMPORTANT)
+            syncItems.push({
+                sync_id: sync._id,              // ✅ ObjectId
+                product_id: item.product_id,    // ✅ ObjectId
+                quantity: item.quantity,
+                before_qty: beforeQty,
+                after_qty: afterQty
+            });
         }
+
+        // 6️⃣ Insert history items
+        await StockSyncItem.insertMany(syncItems, { session });
 
         await session.commitTransaction();
         session.endSession();
 
-        return res.status(200).json({
+        return res.status(201).json({
             message: "Stock synced successfully",
-            updated_products: updatedProducts
+            data: {
+                _id: sync._id,
+                sync_invoice: sync.sync_invoice,
+                note: sync.note,
+                total_items: sync.total_items,
+                createdAt: sync.createdAt
+            }
         });
 
     } catch (error) {
