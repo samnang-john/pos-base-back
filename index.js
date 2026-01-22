@@ -12,6 +12,7 @@ import userRoute from "./route/userRoute.js";
 import authRoute from "./route/authRoute.js";
 import orderRoute from "./route/orderRoute.js";
 import syncStockRoute from "./route/syncStockRoute.js";
+import reportRoute from "./route/reportRoute.js";
 import { authenticate } from "./middleware/authMiddleware.js";
 
 const app = express();
@@ -57,6 +58,7 @@ app.use("/api/product", authenticate, productRoute);
 app.use("/api/user", authenticate, userRoute);
 app.use("/api/order", authenticate, orderRoute);
 app.use("/api/stock", authenticate, syncStockRoute);
+app.use("/api/report", authenticate, reportRoute);
 
 /* =======================
    SERVER + DB
