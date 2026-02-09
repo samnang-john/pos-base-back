@@ -3,6 +3,7 @@ import OrderItems from "../model/orderItemModel.js";
 import Products from "../model/productModel.js";
 import mongoose from "mongoose";
 import { generateOrderReportPDF } from "../util/orderPdf.js";
+import { generateOrderReceiptPDF } from "../util/orderReceiptPdf.js";
 import { generateOrderReportExcel } from "../util/orderExcel.js";
 import StockSync from "../model/stockSyncModel.js";
 import StockSyncItem from "../model/stockSyncItemModel.js";
@@ -168,6 +169,99 @@ export const listOrders = async (req, res) => {
         });
     }
 };
+
+export const getOrderDetail = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // ✅ Validate ObjectId
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+                message: "Invalid order ID"
+            });
+        }
+
+        // ✅ Get order
+        const order = await Orders.findById(id);
+
+        if (!order) {
+            return res.status(404).json({
+                message: "Order not found"
+            });
+        }
+
+        // ✅ Get order items with deep populate
+        const items = await OrderItems.find({ order_id: id })
+            .populate({
+                path: "product_id",
+                populate: [
+                    {
+                        path: "type_of_wood_id",
+                        model: "type_of_woods",
+                        select: "name description"
+                    },
+                    {
+                        path: "end_grain_of_wood_id",
+                        model: "end_grain_of_woods",
+                        select: "name description"
+                    },
+                    {
+                        path: "length_of_wood_id",
+                        model: "length_of_woods",
+                        select: "name description"
+                    }
+                ]
+            });
+
+        // ✅ Success response
+        res.status(200).json({
+            message: "Order detail retrieved successfully",
+            code: 200,
+            data: {
+                order,
+                items
+            }
+        });
+
+    } catch (error) {
+        console.error("Get order detail error:", error);
+
+        res.status(500).json({
+            message: "Internal Server Error",
+            code: 500
+        });
+    }
+};
+
+export const downloadOrderReceipt = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const order = await Orders.findById(id);
+        if (!order) {
+            return res.status(404).json({ message: "Order not found" });
+        }
+
+        const items = await OrderItems.find({ order_id: id })
+            .populate({
+                path: "product_id",
+                populate: [
+                    { path: "type_of_wood_id", model: "type_of_woods", select: "name" },
+                    { path: "end_grain_of_wood_id", model: "end_grain_of_woods", select: "name" },
+                    { path: "length_of_wood_id", model: "length_of_woods", select: "name" }
+                ]
+            });
+
+        generateOrderReceiptPDF(res, order, items);
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({
+            message: "Failed to generate receipt"
+        });
+    }
+};
+
 
 export const downloadOrdersReportPDF = async (req, res) => {
     try {

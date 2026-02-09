@@ -87,14 +87,32 @@ export const generateOrderReportPDF = (res, orders, filters) => {
         y += rowHeight;
     });
 
-    // ===== SUMMARY =====
-    y += 10;
-    doc.font("Helvetica-Bold");
-    doc.text(`Total Orders: ${orders.length}`, 20, y);
-    y += 15;
-    doc.text(`Grand Total: $${grandTotalSum}`, 20, y);
+    // ===== SUMMARY TABLE =====
 
+    const summaryColumns = [
+        { key: "label", label: "Summary", x: 20, width: 505 },
+        { key: "value", label: "Value", x: 505, width: 70 }
+    ];
+
+    doc.font("Helvetica-Bold");
+
+    // Row 1 → Total Orders
+    drawRow(doc, y, rowHeight, summaryColumns, false, {
+        label: "Total Orders",
+        value: orders.length
+    });
+    drawFullTableBorder(doc, y, rowHeight, summaryColumns);
+
+    y += rowHeight;
+
+    // Row 2 → Grand Total
+    drawRow(doc, y, rowHeight, summaryColumns, false, {
+        label: "Grand Total",
+        value: `$${grandTotalSum.toFixed(2)}`
+    });
+    drawFullTableBorder(doc, y, rowHeight, summaryColumns);
     doc.end();
+
 };
 
 // ================= HELPER FUNCTIONS =================
@@ -116,21 +134,21 @@ function drawFullTableBorder(doc, yTop, rowHeight, columns) {
 
     // Horizontal lines
     doc.moveTo(startX, yTop)
-       .lineTo(endX, yTop)
-       .stroke();
+        .lineTo(endX, yTop)
+        .stroke();
     doc.moveTo(startX, yTop + rowHeight)
-       .lineTo(endX, yTop + rowHeight)
-       .stroke();
+        .lineTo(endX, yTop + rowHeight)
+        .stroke();
 
     // Vertical lines
     columns.forEach(col => {
         doc.moveTo(col.x, yTop)
-           .lineTo(col.x, yTop + rowHeight)
-           .stroke();
+            .lineTo(col.x, yTop + rowHeight)
+            .stroke();
     });
 
     // Right border of the last column
     doc.moveTo(endX, yTop)
-       .lineTo(endX, yTop + rowHeight)
-       .stroke();
+        .lineTo(endX, yTop + rowHeight)
+        .stroke();
 }
