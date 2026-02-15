@@ -31,9 +31,7 @@ app.use(cors({
     // allow requests with no origin (Postman, mobile apps)
     if (!origin) return callback(null, true);
 
-    const isLocalNetwork = /^http:\/\/(192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|10\.|localhost:|127\.0\.0\.1:)/.test(origin);
-
-    if (allowedOrigins.includes(origin) || isLocalNetwork) {
+    if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
       callback(new Error("CORS not allowed"));
@@ -41,14 +39,6 @@ app.use(cors({
   },
   credentials: true
 }));
-
-// Handle Private Network Access preflight requests
-app.use((req, res, next) => {
-  if (req.headers['access-control-request-private-network']) {
-    res.setHeader('Access-Control-Allow-Private-Network', 'true');
-  }
-  next();
-});
 
 /* =======================
    MIDDLEWARE
