@@ -7,7 +7,7 @@ export const generateOrderReportExcel = async (res, orders, filters) => {
     // ===== TITLE =====
     worksheet.mergeCells("A1:I1");
     worksheet.getCell("A1").value = "ORDER REPORT";
-    worksheet.getCell("A1").font = { size: 16, bold: true };
+    worksheet.getCell("A1").font = { name: "Khmer Sangam MN", size: 16, bold: true };
     worksheet.getCell("A1").alignment = { horizontal: "center" };
 
     let rowIndex = 2;
@@ -49,7 +49,7 @@ export const generateOrderReportExcel = async (res, orders, filters) => {
         "Date"
     ]);
 
-    headerRow.font = { bold: true };
+    headerRow.font = { name: "Khmer Sangam MN", bold: true };
     headerRow.alignment = { horizontal: "center" };
 
     headerRow.eachCell(cell => {
@@ -90,8 +90,8 @@ export const generateOrderReportExcel = async (res, orders, filters) => {
     const totalOrdersRow = worksheet.addRow(["", "Total Orders", orders.length]);
     const grandTotalRow = worksheet.addRow(["", "Grand Total", grandTotalSum]);
 
-    totalOrdersRow.font = { bold: true };
-    grandTotalRow.font = { bold: true };
+    totalOrdersRow.font = { name: "Khmer Sangam MN", bold: true };
+    grandTotalRow.font = { name: "Khmer Sangam MN", bold: true };
 
     // ===== RESPONSE =====
     res.setHeader(

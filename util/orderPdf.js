@@ -9,10 +9,14 @@ export const generateOrderReportPDF = (res, orders, filters) => {
         "attachment; filename=order-report.pdf"
     );
 
+    // ===== REGISTER FONT =====
+    const fontPath = "assets/fonts/KhmerSangamMN.ttf";
+    doc.registerFont("Khmer", fontPath);
+
     doc.pipe(res);
 
     // ===== TITLE =====
-    doc.fontSize(18).text("ORDER REPORT", { align: "center" });
+    doc.font("Khmer").fontSize(18).text("ORDER REPORT", { align: "center" });
     doc.moveDown(0.5);
 
     if (filters.startDate && filters.endDate) {
@@ -40,12 +44,12 @@ export const generateOrderReportPDF = (res, orders, filters) => {
     ];
 
     // ===== TABLE HEADER =====
-    doc.font("Helvetica-Bold").fontSize(9);
+    doc.fontSize(9);
     drawRow(doc, y, rowHeight, columns, true);
     drawFullTableBorder(doc, y, rowHeight, columns);
 
     y += rowHeight;
-    doc.font("Helvetica").fontSize(9);
+    doc.fontSize(9);
 
     let grandTotalSum = 0;
 
@@ -56,11 +60,9 @@ export const generateOrderReportPDF = (res, orders, filters) => {
             doc.addPage();
             y = 50;
 
-            doc.font("Helvetica-Bold");
             drawRow(doc, y, rowHeight, columns, true);
             drawFullTableBorder(doc, y, rowHeight, columns);
             y += rowHeight;
-            doc.font("Helvetica");
         }
 
         const itemsCount = order.items.reduce(
@@ -93,8 +95,6 @@ export const generateOrderReportPDF = (res, orders, filters) => {
         { key: "label", label: "Summary", x: 20, width: 505 },
         { key: "value", label: "Value", x: 505, width: 70 }
     ];
-
-    doc.font("Helvetica-Bold");
 
     // Row 1 → Total Orders
     drawRow(doc, y, rowHeight, summaryColumns, false, {

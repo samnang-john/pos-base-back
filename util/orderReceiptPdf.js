@@ -9,10 +9,14 @@ export const generateOrderReceiptPDF = (res, order, items) => {
         `attachment; filename=receipt-${order.order_number}.pdf`
     );
 
+    // ===== REGISTER FONT =====
+    const fontPath = "assets/fonts/KhmerSangamMN.ttf";
+    doc.registerFont("Khmer", fontPath);
+
     doc.pipe(res);
 
     // ===== HEADER =====
-    doc.fontSize(18).text("MY STORE POS", { align: "center", bold: true });
+    doc.font("Khmer").fontSize(18).text("MY STORE POS", { align: "center", bold: true });
     doc.fontSize(10).text("Address: 123 Main Street, City", { align: "center" });
     doc.text("Phone: (123) 456-7890", { align: "center" });
     doc.moveDown(0.5);
@@ -36,10 +40,8 @@ export const generateOrderReceiptPDF = (res, order, items) => {
     ];
 
     let y = doc.y + 5;
-    doc.font("Helvetica-Bold");
     drawRow(doc, y, columns, true);
     y += 20;
-    doc.font("Helvetica");
 
     // ===== ITEMS =====
     items.forEach((item, index) => {
@@ -71,7 +73,6 @@ export const generateOrderReceiptPDF = (res, order, items) => {
     const summaryStartX = 350;
     const summaryWidth = 150;
 
-    doc.font("Helvetica-Bold");
     doc.text(`Subtotal: $${order.subtotal.toFixed(2)}`, summaryStartX, y, { width: summaryWidth, align: "right" });
     y += 15;
     doc.text(`Discount: $${order.discount.toFixed(2)}`, summaryStartX, y, { width: summaryWidth, align: "right" });
