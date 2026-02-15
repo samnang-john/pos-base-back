@@ -31,7 +31,9 @@ app.use(cors({
     // allow requests with no origin (Postman, mobile apps)
     if (!origin) return callback(null, true);
 
-    if (allowedOrigins.includes(origin)) {
+    const isLocalNetwork = /^http:\/\/(192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|10\.|localhost:|127\.0\.0\.1:)/.test(origin);
+
+    if (allowedOrigins.includes(origin) || isLocalNetwork) {
       callback(null, true);
     } else {
       callback(new Error("CORS not allowed"));
