@@ -42,6 +42,14 @@ app.use(cors({
   credentials: true
 }));
 
+// Handle Private Network Access preflight requests
+app.use((req, res, next) => {
+  if (req.headers['access-control-request-private-network']) {
+    res.setHeader('Access-Control-Allow-Private-Network', 'true');
+  }
+  next();
+});
+
 /* =======================
    MIDDLEWARE
 ======================= */
