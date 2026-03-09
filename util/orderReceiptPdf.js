@@ -52,10 +52,11 @@ export const generateOrderReceiptPDF = (res, order, items) => {
 
     // ===== TABLE HEADER =====
     const columns = [
-        { key: "no", label: "ល.រ", x: 30, width: 40, align: "center" },
-        { key: "product", label: "មុខទំនិញ", x: 70, width: 280, align: "left" },
-        { key: "qty", label: "ចំនួន", x: 350, width: 45, align: "center" },
-        { key: "unitPrice", label: "តម្លៃ", x: 395, width: 75, align: "right" },
+        { key: "no", label: "ល.រ", x: 30, width: 30, align: "center" },
+        { key: "product", label: "មុខទំនិញ", x: 60, width: 220, align: "left" },
+        { key: "qty", label: "ចំនួន", x: 280, width: 40, align: "center" },
+        { key: "unitPrice", label: "តម្លៃ/គ្រឿង", x: 320, width: 75, align: "right" },
+        { key: "discount", label: "ប.តម្លៃ", x: 395, width: 75, align: "right" },
         { key: "total", label: "តម្លៃសរុប", x: 470, width: 95, align: "right" }
     ];
 
@@ -78,6 +79,7 @@ export const generateOrderReceiptPDF = (res, order, items) => {
             product: productName,
             qty: item.quantity,
             unitPrice: `$${item.price.toFixed(2)}`,
+            discount: `$${(item.discount || 0).toFixed(2)}`,
             total: `$${item.total.toFixed(2)}`
         };
 
