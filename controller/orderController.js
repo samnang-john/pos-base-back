@@ -11,112 +11,112 @@ import Counter from "../model/Counter.js";
 
 // ===== Helper: Generate Invoice Number =====
 const getNextInvoiceNumber = async (session) => {
-  const counter = await Counter.findOneAndUpdate(
-    { name: "invoice" },
-    { $inc: { seq: 1 } },
-    { new: true, upsert: true, session }
-  );
+    const counter = await Counter.findOneAndUpdate(
+        { name: "invoice" },
+        { $inc: { seq: 1 } },
+        { new: true, upsert: true, session }
+    );
 
-  return `${counter.seq.toString().padStart(6, "0")}`;
+    return `${counter.seq.toString().padStart(6, "0")}`;
 };
 
 export const createOrder = async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
-  try {
-    const { customer, items, discount = 0, tax = 0 } = req.body;
+    try {
+        const { customer, items, discount = 0, tax = 0 } = req.body;
 
-    if (!items || items.length === 0) {
-      return res.status(400).json({ message: "Order items are required" });
-    }
-
-    let subtotal = 0;
-    const orderItemsToInsert = [];
-
-    for (const item of items) {
-      if (!item.product_id || !item.quantity) {
-        throw new Error("Invalid item structure");
-      }
-
-      const itemDiscount = item.discount || 0;
-
-      const product = await Products.findOneAndUpdate(
-        {
-          _id: item.product_id,
-          number_of_wood: { $gte: item.quantity }
-        },
-        {
-          $inc: { number_of_wood: -item.quantity }
-        },
-        { new: true, session }
-      );
-
-      if (!product) {
-        throw new Error(
-          `Not enough stock or product not found: ${item.product_id}`
-        );
-      }
-
-      const price = product.price_of_each;
-      const cost = product.cost_of_each;
-      const total = price * item.quantity - itemDiscount;
-
-      subtotal += total;
-
-      orderItemsToInsert.push({
-        product_id: product._id,
-        quantity: item.quantity,
-        price,
-        cost,
-        discount: itemDiscount,
-        total
-      });
-    }
-
-    // ===== Generate sequential invoice number =====
-    const orderNumber = await getNextInvoiceNumber(session);
-
-    const grandTotal = subtotal - discount + tax;
-
-    const [order] = await Orders.create(
-      [
-        {
-          order_number: orderNumber,
-          customer,
-          subtotal,
-          discount,
-          tax,
-          grand_total: grandTotal,
-          payment_status: "paid"
+        if (!items || items.length === 0) {
+            return res.status(400).json({ message: "Order items are required" });
         }
-      ],
-      { session }
-    );
 
-    const formattedItems = orderItemsToInsert.map((item) => ({
-      ...item,
-      order_id: order._id
-    }));
+        let subtotal = 0;
+        const orderItemsToInsert = [];
 
-    await OrderItems.insertMany(formattedItems, { session });
+        for (const item of items) {
+            if (!item.product_id || !item.quantity) {
+                throw new Error("Invalid item structure");
+            }
 
-    await session.commitTransaction();
-    session.endSession();
+            const itemDiscount = item.discount || 0;
 
-    return res.status(201).json({
-      message: "Order created successfully",
-      order,
-      items: formattedItems
-    });
-  } catch (error) {
-    await session.abortTransaction();
-    session.endSession();
+            const product = await Products.findOneAndUpdate(
+                {
+                    _id: item.product_id,
+                    number_of_wood: { $gte: item.quantity }
+                },
+                {
+                    $inc: { number_of_wood: -item.quantity }
+                },
+                { new: true, session }
+            );
 
-    return res.status(500).json({
-      message: error.message || "Something went wrong"
-    });
-  }
+            if (!product) {
+                throw new Error(
+                    `Not enough stock or product not found: ${item.product_id}`
+                );
+            }
+
+            const price = product.price_of_each;
+            const cost = product.cost_of_each;
+            const total = price * item.quantity - itemDiscount;
+
+            subtotal += total;
+
+            orderItemsToInsert.push({
+                product_id: product._id,
+                quantity: item.quantity,
+                price,
+                cost,
+                discount: itemDiscount,
+                total
+            });
+        }
+
+        // ===== Generate sequential invoice number =====
+        const orderNumber = await getNextInvoiceNumber(session);
+
+        const grandTotal = subtotal - discount + tax;
+
+        const [order] = await Orders.create(
+            [
+                {
+                    order_number: orderNumber,
+                    customer,
+                    subtotal,
+                    discount,
+                    tax,
+                    grand_total: grandTotal,
+                    payment_status: "paid"
+                }
+            ],
+            { session }
+        );
+
+        const formattedItems = orderItemsToInsert.map((item) => ({
+            ...item,
+            order_id: order._id
+        }));
+
+        await OrderItems.insertMany(formattedItems, { session });
+
+        await session.commitTransaction();
+        session.endSession();
+
+        return res.status(201).json({
+            message: "Order created successfully",
+            order,
+            items: formattedItems
+        });
+    } catch (error) {
+        await session.abortTransaction();
+        session.endSession();
+
+        return res.status(500).json({
+            message: error.message || "Something went wrong"
+        });
+    }
 };
 
 export const listOrders = async (req, res) => {
@@ -368,6 +368,17 @@ export const downloadOrdersReportExcel = async (req, res) => {
     }
 };
 
+// ===== Helper: Generate Stock Sync Number =====
+const getNextStockSyncNumber = async (session) => {
+    const counter = await Counter.findOneAndUpdate(
+        { name: "stock_sync" },
+        { $inc: { seq: 1 } },
+        { new: true, upsert: true, session }
+    );
+
+    return `STOCK-${counter.seq.toString().padStart(6, "0")}`;
+};
+
 export const syncStock = async (req, res) => {
     const session = await mongoose.startSession();
     session.startTransaction();
@@ -379,8 +390,8 @@ export const syncStock = async (req, res) => {
             return res.status(400).json({ message: "Stock items are required" });
         }
 
-        // 1️⃣ Create sync header
-        const syncInvoice = `SYNC-${Date.now()}`;
+        // Generate invoice
+        const syncInvoice = await getNextStockSyncNumber(session);
 
         const [sync] = await StockSync.create(
             [{
@@ -393,14 +404,10 @@ export const syncStock = async (req, res) => {
 
         const syncItems = [];
 
-        // 2️⃣ Loop through items
         for (const item of items) {
-            if (!item.product_id || !item.quantity) {
-                throw new Error("Invalid item structure");
-            }
 
-            // 3️⃣ Get product (inside transaction)
             const product = await Products.findById(item.product_id).session(session);
+
             if (!product) {
                 throw new Error(`Product not found: ${item.product_id}`);
             }
@@ -408,24 +415,21 @@ export const syncStock = async (req, res) => {
             const beforeQty = product.number_of_wood;
             const afterQty = beforeQty + item.quantity;
 
-            // 4️⃣ Update stock
             await Products.updateOne(
                 { _id: item.product_id },
                 { $inc: { number_of_wood: item.quantity } },
                 { session }
             );
 
-            // 5️⃣ Prepare sync item (IMPORTANT)
             syncItems.push({
-                sync_id: sync._id,              // ✅ ObjectId
-                product_id: item.product_id,    // ✅ ObjectId
+                sync_id: sync._id,
+                product_id: item.product_id,
                 quantity: item.quantity,
                 before_qty: beforeQty,
                 after_qty: afterQty
             });
         }
 
-        // 6️⃣ Insert history items
         await StockSyncItem.insertMany(syncItems, { session });
 
         await session.commitTransaction();
@@ -433,20 +437,16 @@ export const syncStock = async (req, res) => {
 
         return res.status(201).json({
             message: "Stock synced successfully",
-            data: {
-                _id: sync._id,
-                sync_invoice: sync.sync_invoice,
-                note: sync.note,
-                total_items: sync.total_items,
-                createdAt: sync.createdAt
-            }
+            data: sync
         });
 
     } catch (error) {
+
         await session.abortTransaction();
         session.endSession();
 
         console.error("Sync stock error:", error);
+
         return res.status(500).json({
             message: error.message || "Failed to sync stock"
         });

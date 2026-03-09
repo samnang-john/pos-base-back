@@ -1,4 +1,5 @@
 import PDFDocument from "pdfkit";
+import mongoose from "mongoose";
 import StockSync from "../model/stockSyncModel.js";
 import StockSyncItem from "../model/stockSyncItemModel.js";
 
@@ -57,11 +58,20 @@ export const getStockSyncDetail = async (req, res) => {
     try {
         const { id } = req.params;
 
+        // ✅ Validate ObjectId first
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+                message: "Invalid stock sync id"
+            });
+        }
+
         const sync = await StockSync.findById(id)
             .select("_id sync_invoice note total_items createdAt");
 
         if (!sync) {
-            return res.status(404).json({ message: "Stock sync not found" });
+            return res.status(404).json({
+                message: "Stock sync not found"
+            });
         }
 
         const items = await StockSyncItem.find({ sync_id: id })
@@ -75,39 +85,35 @@ export const getStockSyncDetail = async (req, res) => {
             })
             .select("product_id quantity before_qty after_qty");
 
+        let total_price_of_all_items = 0;
+        let total_cost_of_all_items = 0;
+
+        items.forEach(item => {
+            const qty = item.quantity || 0;
+            const price = item.product_id?.total_price_of_wood || item.product_id?.price_of_each || 0;
+            const cost = item.product_id?.cost_of_each || 0;
+
+            total_price_of_all_items += qty * price;
+            total_cost_of_all_items += qty * cost;
+        });
+
         res.status(200).json({
             message: "Stock sync detail retrieved successfully",
             data: {
                 ...sync.toObject(),
+                total_price_of_all_items,
+                total_cost_of_all_items,
                 items
             }
         });
 
     } catch (error) {
         console.error("Get stock sync detail error:", error);
+
         res.status(500).json({
             message: "Failed to retrieve stock sync detail"
         });
     }
-};
-
-/* =========================
-   PDF TABLE HELPER
-========================= */
-const drawTableRow = (doc, y, row, colWidths) => {
-    let x = doc.page.margins.left;
-
-    row.forEach((cell, i) => {
-        doc
-            .fontSize(9)
-            .text(String(cell), x + 4, y + 6, {
-                width: colWidths[i] - 8,
-                align: "left"
-            });
-
-        doc.rect(x, y, colWidths[i], 22).stroke();
-        x += colWidths[i];
-    });
 };
 
 /* =========================
@@ -138,7 +144,7 @@ export const downloadStockSyncPDF = async (req, res) => {
             .select("quantity before_qty after_qty product_id");
 
         /* ===== PDF SETUP ===== */
-        const doc = new PDFDocument({ size: "A4", margin: 40 });
+        const doc = new PDFDocument({ size: "A4", margin: 30 });
 
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader(
@@ -146,60 +152,111 @@ export const downloadStockSyncPDF = async (req, res) => {
             `attachment; filename=${sync.sync_invoice}.pdf`
         );
 
+        // ===== REGISTER FONT =====
+        const fontPath = "assets/fonts/KhmerSangamMN.ttf";
+        doc.registerFont("Khmer", fontPath);
+
         doc.pipe(res);
 
-        /* ===== TITLE ===== */
-        doc.fontSize(18).text("Stock Sync Report", { align: "center" });
-        doc.moveDown();
+        /* ===== HEADER ===== */
+        doc.font("Khmer").fontSize(18).text("ប៊ុន ឈៀង", { align: "center", bold: true });
+        doc.fontSize(14).text("ដេប៉ូឈើ បឹងត្របែកទី១ (B.T.1)", { align: "center" });
+        doc.moveDown(0.5);
 
-        /* ===== INFO ===== */
-        doc.fontSize(11).text(`Invoice: ${sync.sync_invoice}`);
-        doc.text(`Date: ${new Date(sync.createdAt).toLocaleString()}`);
-        if (sync.note) doc.text(`Note: ${sync.note}`);
-        doc.text(`Total Items: ${sync.total_items}`);
-        doc.moveDown(1.5);
+        const headerStartY = doc.y;
+        const lineHeight = 15;
+        const rightSideX = 350;
+        const rightSideWidth = 565 - rightSideX;
 
-        /* ===== TABLE CONFIG ===== */
-        const colWidths = [30, 150, 85, 75, 55, 60, 60];
-        const tableHeader = [
-            "No",
-            "Type",
-            "End Grain",
-            "Length",
-            "Qty",
-            "Cost",
-            "Price"
-        ];
+        doc.fontSize(10);
 
-        let y = doc.y;
+        // Row 1
+        doc.text(`អាសយដ្ឋាន ផ្លូវលេខ ១០៣`, 30, headerStartY);
+        doc.text(`វិក្កយបត្រ #: ${sync.sync_invoice}`, rightSideX, headerStartY, { align: "right", width: rightSideWidth });
+
+        // Row 2
+        doc.text(`ទល់មុខសាលាបឋមសិក្សាហ៊ុននាងបឹងត្របែកទី២`, 30, headerStartY + lineHeight);
+        doc.text(`កាលបរិច្ឆេទ: ${new Date(sync.createdAt).toLocaleString()}`, rightSideX, headerStartY + lineHeight, { align: "right", width: rightSideWidth });
+
+        // Row 3
+        doc.text(`ភ្នំពេញ`, 30, headerStartY + (lineHeight * 2));
+        doc.text(`ទូរស័ព្ទ: ${"012 23 23 37"}`, rightSideX, headerStartY + (lineHeight * 2), { align: "right", width: rightSideWidth });
+
+        // Row 5
+        doc.text(`${"097 87 47 347"}`, rightSideX, headerStartY + (lineHeight * 3), { align: "right", width: rightSideWidth });
+
+        doc.y = headerStartY + (lineHeight * 5);
+        doc.moveTo(30, doc.y).lineTo(565, doc.y).stroke(); // horizontal line
 
         /* ===== TABLE HEADER ===== */
-        drawTableRow(doc, y, tableHeader, colWidths);
-        y += 22;
+        const columns = [
+            { key: "no", label: "ល.រ", x: 30, width: 30, align: "center" },
+            { key: "product", label: "មុខទំនិញ", x: 60, width: 280, align: "left" },
+            { key: "qty", label: "ចំនួន", x: 340, width: 50, align: "center" },
+            { key: "cost", label: "ថ្លៃដើម/គ្រឿង", x: 390, width: 80, align: "right" },
+            { key: "total", label: "តម្លៃសរុប", x: 470, width: 95, align: "right" }
+        ];
+
+        let y = doc.y + 5;
+        drawRow(doc, y, columns, true);
+        y += 20;
+
+        let totalCostAll = 0;
 
         /* ===== TABLE ROWS ===== */
         items.forEach((item, index) => {
-            // Page break
-            if (y > doc.page.height - 80) {
+            if (y > doc.page.height - 100) {
                 doc.addPage();
-                y = doc.page.margins.top;
-
-                drawTableRow(doc, y, tableHeader, colWidths);
-                y += 22;
+                y = 50;
             }
 
-            drawTableRow(doc, y, [
-                index + 1,
-                item.product_id?.type_of_wood_id?.name || "-",
-                item.product_id?.end_grain_of_wood_id?.name || "-",
-                item.product_id?.length_of_wood_id?.name || "-", // ✅ FIXED
-                item.quantity,
-                item.product_id?.cost_of_each || 0,
-                item.product_id?.price_of_each || 0
-            ], colWidths);
+            const product = item.product_id;
+            const productName = `${product?.type_of_wood_id?.name || ""} ${product?.end_grain_of_wood_id?.name || ""} x ${product?.length_of_wood_id?.name || ""}`;
 
-            y += 22;
+            const cost = product?.cost_of_each || 0;
+            const qty = item.quantity || 0;
+            const rowTotalCost = cost * qty;
+
+            totalCostAll += rowTotalCost;
+
+            const rowData = {
+                no: index + 1,
+                product: productName.trim() === "x" ? "-" : productName,
+                qty: qty,
+                cost: `$${cost.toFixed(2)}`,
+                total: `$${rowTotalCost.toFixed(2)}`
+            };
+
+            drawRow(doc, y, columns, false, rowData);
+            y += 20;
         });
+
+        doc.moveTo(30, y).lineTo(565, y).stroke();
+        y += 10;
+
+        // ===== SUMMARY =====
+        const summaryStartX = 350;
+        const summaryWidth = 215;
+
+        // Display note and total items below the product list on the left side
+        doc.text(`ចំណាំ: ${sync.note || "-"}`, 30, y, { width: 300, align: "left" });
+        doc.text(`ចំនួនទំនិញសរុប: ${sync.total_items}`, 30, y + 15, { width: 300, align: "left" });
+
+        // Total cost on the right side
+        doc.fontSize(12).text(`ថ្លៃដើមសរុប: $${totalCostAll.toFixed(2)}`, summaryStartX, y, { width: summaryWidth, align: "right" });
+        y += 50;
+
+        // ===== SIGNATURES =====
+        const signatureY = y;
+        doc.fontSize(10);
+
+        // Left side: Prepared by
+        doc.text("អ្នករៀបចំ", 30, signatureY, { width: 200, align: "center" });
+        doc.text("(..........................)", 30, signatureY + 45, { width: 200, align: "center" });
+
+        // Right side: Checked by
+        doc.text("អ្នកត្រួតពិនិត្យ", 350, signatureY, { width: 215, align: "center" });
+        doc.text("(..........................)", 350, signatureY + 45, { width: 215, align: "center" });
 
         doc.end();
     } catch (error) {
@@ -209,3 +266,11 @@ export const downloadStockSyncPDF = async (req, res) => {
         });
     }
 };
+
+// ===== HELPERS =====
+function drawRow(doc, y, columns, isHeader, data = {}) {
+    columns.forEach(col => {
+        const text = isHeader ? col.label : data[col.key];
+        doc.text(text, col.x, y, { width: col.width, align: col.align || "left" });
+    });
+}
