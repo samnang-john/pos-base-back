@@ -135,13 +135,13 @@ export const generateOrderReportPDF = (res, orders, filters) => {
     y += 10;
 
     doc.fontSize(10);
-    doc.text(`ចំនួនការបញ្ជាទិញសរុប: ${orders.length}`, 460, y);
+    doc.text(`ចំនួនការបញ្ជាទិញសរុប: ${orders.length}`, 440, y);
 
-    y += 17;
+    y += 17; 
 
     doc.fontSize(12).text(
         `សរុបទឹកប្រាក់: $${grandTotal.toFixed(2)}`,
-        460,
+        440,
         y
     );
 
