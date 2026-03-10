@@ -285,6 +285,7 @@ export const downloadOrdersReportPDF = async (req, res) => {
 
         const matchStage = {};
 
+        // Filter by order_date (not createdAt)
         if (startDate && endDate) {
             const start = new Date(startDate);
             start.setHours(0, 0, 0, 0);
@@ -292,16 +293,16 @@ export const downloadOrdersReportPDF = async (req, res) => {
             const end = new Date(endDate);
             end.setHours(23, 59, 59, 999);
 
-            matchStage.createdAt = {
+            matchStage.order_date = {
                 $gte: start,
                 $lte: end
             };
         }
 
-        // Get orders with items
         const orders = await Orders.aggregate([
             { $match: matchStage },
-            { $sort: { createdAt: -1 } },
+            { $sort: { order_date: -1 } },
+
             {
                 $lookup: {
                     from: "order_items",
@@ -309,18 +310,36 @@ export const downloadOrdersReportPDF = async (req, res) => {
                     foreignField: "order_id",
                     as: "items"
                 }
+            },
+
+            {
+                $addFields: {
+                    items_count: {
+                        $sum: "$items.quantity"
+                    }
+                }
             }
         ]);
 
         if (!orders.length) {
-            return res.status(404).json({ message: "No orders found" });
+            return res.status(404).json({
+                message: "No orders found"
+            });
         }
 
-        generateOrderReportPDF(res, orders, { startDate, endDate });
+        // Generate PDF
+        generateOrderReportPDF(res, orders, {
+            startDate,
+            endDate
+        });
 
     } catch (error) {
+
         console.error("Order report PDF error:", error);
-        res.status(500).json({ message: "Failed to generate order report PDF" });
+
+        res.status(500).json({
+            message: "Failed to generate order report PDF"
+        });
     }
 };
 

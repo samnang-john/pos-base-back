@@ -1,6 +1,7 @@
 import PDFDocument from "pdfkit";
 
 export const generateOrderReportPDF = (res, orders, filters) => {
+
     const doc = new PDFDocument({ margin: 30, size: "A4" });
 
     res.setHeader("Content-Type", "application/pdf");
@@ -15,53 +16,94 @@ export const generateOrderReportPDF = (res, orders, filters) => {
 
     doc.pipe(res);
 
-    // ===== TITLE =====
-    doc.font("Khmer").fontSize(18).text("ORDER REPORT", { align: "center" });
+    // ================= HEADER =================
+    doc.font("Khmer").fontSize(18).text("ប៊ុន ឈៀង", { align: "center" });
+    doc.fontSize(14).text("ដេប៉ូឈើ បឹងត្របែកទី១ (B.T.1)", { align: "center" });
+
     doc.moveDown(0.5);
 
-    if (filters.startDate && filters.endDate) {
-        doc.fontSize(10).text(
-            `From ${filters.startDate} to ${filters.endDate}`,
-            { align: "center" }
-        );
-        doc.moveDown();
-    }
+    const headerStartY = doc.y;
+    const lineHeight = 15;
+    const rightSideX = 350;
+    const rightSideWidth = 565 - rightSideX;
 
-    // ===== TABLE CONFIG =====
-    const rowHeight = 20;
-    let y = doc.y;
+    doc.fontSize(10);
+
+    doc.text(`អាសយដ្ឋាន ផ្លូវលេខ ១០៣`, 30, headerStartY);
+    doc.text(`របាយការណ៍ការលក់`, rightSideX, headerStartY, {
+        align: "right",
+        width: rightSideWidth
+    });
+
+    doc.text(
+        `ទល់មុខសាលាបឋមសិក្សាហ៊ុននាងបឹងត្របែកទី២`,
+        30,
+        headerStartY + lineHeight
+    );
+
+    doc.text(
+        filters.startDate && filters.endDate
+            ? `ចាប់ពី: ${filters.startDate}  ដល់: ${filters.endDate}`
+            : `កាលបរិច្ឆេទ: ${new Date().toLocaleDateString()}`,
+        rightSideX,
+        headerStartY + lineHeight,
+        { align: "right", width: rightSideWidth }
+    );
+
+    doc.text(`ភ្នំពេញ`, 30, headerStartY + (lineHeight * 2));
+
+    doc.text(
+        `ទូរស័ព្ទ: 012 23 23 37`,
+        rightSideX,
+        headerStartY + (lineHeight * 2),
+        { align: "right", width: rightSideWidth }
+    );
+
+    doc.text(
+        `097 87 47 347`,
+        rightSideX,
+        headerStartY + (lineHeight * 3),
+        { align: "right", width: rightSideWidth }
+    );
+
+    doc.y = headerStartY + (lineHeight * 3);
+    doc.moveDown();
+
+    // ================= TABLE =================
 
     const columns = [
-        { key: "no", label: "No", x: 20, width: 30 },
-        { key: "invoice", label: "Invoice", x: 55, width: 100 }, // bigger
-        { key: "customer", label: "Customer", x: 160, width: 90 },
-        { key: "items", label: "Items", x: 240, width: 40 },
-        { key: "subtotal", label: "Subtotal", x: 275, width: 60 },
-        { key: "discount", label: "Discount", x: 330, width: 60 },
-        { key: "tax", label: "Tax", x: 395, width: 40 },
-        { key: "total", label: "Total", x: 440, width: 60 },
-        { key: "date", label: "Date", x: 505, width: 70 }
+        { key: "no", label: "ល.រ", x: 30, width: 40, align: "center" },
+
+        { key: "invoice", label: "លេខវិក្កយបត្រ", x: 70, width: 70, align: "left" },
+
+        { key: "customer", label: "អតិថិជន", x: 140, width: 90, align: "left" },
+
+        { key: "items", label: "ចំនួន", x: 230, width: 50, align: "center" },
+
+        { key: "subtotal", label: "សរុប", x: 280, width: 70, align: "left" },
+
+        { key: "discount", label: "បញ្ចុះតម្លៃ", x: 350, width: 65, align: "left" },
+
+        { key: "total", label: "សរុបចុងក្រោយ", x: 415, width: 80, align: "left" },
+ 
+        { key: "date", label: "កាលបរិច្ឆេទ", x: 495, width: 70, align: "center" }
     ];
 
-    // ===== TABLE HEADER =====
-    doc.fontSize(9);
+    const rowHeight = 22;
+    let y = doc.y + 10;
+
     drawRow(doc, y, rowHeight, columns, true);
-    drawFullTableBorder(doc, y, rowHeight, columns);
-
     y += rowHeight;
-    doc.fontSize(9);
 
-    let grandTotalSum = 0;
+    let grandTotal = 0;
 
-    // ===== TABLE ROWS =====
     orders.forEach((order, index) => {
-        // Page break
+
         if (y + rowHeight > doc.page.height - 80) {
             doc.addPage();
             y = 50;
 
             drawRow(doc, y, rowHeight, columns, true);
-            drawFullTableBorder(doc, y, rowHeight, columns);
             y += rowHeight;
         }
 
@@ -77,78 +119,61 @@ export const generateOrderReportPDF = (res, orders, filters) => {
             items: itemsCount,
             subtotal: `$${order.subtotal}`,
             discount: `$${order.discount}`,
-            tax: `$${order.tax}`,
             total: `$${order.grand_total}`,
-            date: new Date(order.createdAt).toLocaleDateString()
+            date: new Date(order.order_date).toLocaleDateString()
         };
 
         drawRow(doc, y, rowHeight, columns, false, rowData);
-        drawFullTableBorder(doc, y, rowHeight, columns);
 
-        grandTotalSum += order.grand_total;
+        grandTotal += order.grand_total;
         y += rowHeight;
+
     });
 
-    // ===== SUMMARY TABLE =====
+    // ================= SUMMARY =================
 
-    const summaryColumns = [
-        { key: "label", label: "Summary", x: 20, width: 505 },
-        { key: "value", label: "Value", x: 505, width: 70 }
-    ];
+    y += 10;
 
-    // Row 1 → Total Orders
-    drawRow(doc, y, rowHeight, summaryColumns, false, {
-        label: "Total Orders",
-        value: orders.length
-    });
-    drawFullTableBorder(doc, y, rowHeight, summaryColumns);
+    doc.fontSize(10);
+    doc.text(`ចំនួនការបញ្ជាទិញសរុប: ${orders.length}`, 460, y);
 
-    y += rowHeight;
+    y += 17;
 
-    // Row 2 → Grand Total
-    drawRow(doc, y, rowHeight, summaryColumns, false, {
-        label: "Grand Total",
-        value: `$${grandTotalSum.toFixed(2)}`
-    });
-    drawFullTableBorder(doc, y, rowHeight, summaryColumns);
+    doc.fontSize(12).text(
+        `សរុបទឹកប្រាក់: $${grandTotal.toFixed(2)}`,
+        460,
+        y
+    );
+
     doc.end();
-
 };
 
-// ================= HELPER FUNCTIONS =================
+// ================= DRAW ROW =================
 
-function drawRow(doc, y, height, columns, isHeader, rowData = {}) {
+function drawRow(doc, y, rowHeight, columns, isHeader, data = {}) {
+
     columns.forEach(col => {
-        const text = isHeader ? col.label : rowData[col.key];
-        doc.text(text, col.x + 3, y + 5, {
-            width: col.width - 6,
-            align: "left",
-            ellipsis: true
-        });
-    });
-}
 
-function drawFullTableBorder(doc, yTop, rowHeight, columns) {
-    const startX = columns[0].x;
-    const endX = columns[columns.length - 1].x + columns[columns.length - 1].width;
+        const text = isHeader ? col.label : data[col.key] || "";
 
-    // Horizontal lines
-    doc.moveTo(startX, yTop)
-        .lineTo(endX, yTop)
-        .stroke();
-    doc.moveTo(startX, yTop + rowHeight)
-        .lineTo(endX, yTop + rowHeight)
-        .stroke();
+        if (isHeader) {
+            doc.rect(col.x, y, col.width, rowHeight)
+                .fillAndStroke("#eeeeee", "black");
+        } else {
+            doc.rect(col.x, y, col.width, rowHeight).stroke();
+        }
 
-    // Vertical lines
-    columns.forEach(col => {
-        doc.moveTo(col.x, yTop)
-            .lineTo(col.x, yTop + rowHeight)
-            .stroke();
+        doc.fillColor("black").text(
+            text,
+            col.x + 5,
+            y + 6,
+            {
+                width: col.width - 10,
+                align: col.align || "left",
+                ellipsis: true
+            }
+        );
+
     });
 
-    // Right border of the last column
-    doc.moveTo(endX, yTop)
-        .lineTo(endX, yTop + rowHeight)
-        .stroke();
 }
