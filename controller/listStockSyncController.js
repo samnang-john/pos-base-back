@@ -176,7 +176,7 @@ export const downloadStockSyncPDF = async (req, res) => {
 
         // Row 2
         doc.text(`ទល់មុខសាលាបឋមសិក្សាហ៊ុននាងបឹងត្របែកទី២`, 30, headerStartY + lineHeight);
-        doc.text(`កាលបរិច្ឆេទ: ${new Date(sync.createdAt).toLocaleString()}`, rightSideX, headerStartY + lineHeight, { align: "right", width: rightSideWidth });
+        doc.text(`កាលបរិច្ឆេទ: ${new Date(sync.createdAt).toLocaleString("en-US", { timeZone: "Asia/Phnom_Penh" })}`, rightSideX, headerStartY + lineHeight, { align: "right", width: rightSideWidth });
 
         // Row 3
         doc.text(`ភ្នំពេញ`, 30, headerStartY + (lineHeight * 2));

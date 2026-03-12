@@ -33,7 +33,12 @@ export const generateOrderReceiptPDF = (res, order, items) => {
 
     // Row 2
     doc.text(`ទល់មុខសាលាបឋមសិក្សាហ៊ុននាងបឹងត្របែកទី២`, 30, headerStartY + lineHeight);
-    doc.text(`កាលបរិច្ឆេទ: ${new Date(order.createdAt).toLocaleString()}`, rightSideX, headerStartY + lineHeight, { align: "right", width: rightSideWidth });
+    doc.text(
+        `កាលបរិច្ឆេទ: ${new Date(order.createdAt).toLocaleString("en-US", { timeZone: "Asia/Phnom_Penh" })}`,
+        rightSideX,
+        headerStartY + lineHeight,
+        { align: "right", width: rightSideWidth }
+    );
 
     // Row 3
     doc.text(`ភ្នំពេញ`, 30, headerStartY + (lineHeight * 2));
