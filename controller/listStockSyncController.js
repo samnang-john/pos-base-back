@@ -202,6 +202,7 @@ export const downloadStockSyncPDF = async (req, res) => {
         y += 20;
 
         let totalCostAll = 0;
+        let totalQtyAll = 0;
 
         /* ===== TABLE ROWS ===== */
         items.forEach((item, index) => {
@@ -218,6 +219,7 @@ export const downloadStockSyncPDF = async (req, res) => {
             const rowTotalCost = cost * qty;
 
             totalCostAll += rowTotalCost;
+            totalQtyAll += qty;
 
             const rowData = {
                 no: index + 1,
@@ -239,12 +241,13 @@ export const downloadStockSyncPDF = async (req, res) => {
         const summaryWidth = 215;
 
         // Display note and total items below the product list on the left side
-        doc.text(`ចំណាំ: ${sync.note || "-"}`, 30, y, { width: 300, align: "left" });
-        doc.text(`ចំនួនទំនិញសរុប: ${sync.total_items}`, 30, y + 15, { width: 300, align: "left" });
+        doc.text(`សរុបមុខទំនិញ: ${sync.total_items}`, 30, y, { width: 300, align: "left" });
+        doc.text(`ចំណាំ: ${sync.note || "-"}`, 30, y + 15, { width: 300, align: "left" });
 
-        // Total cost on the right side
-        doc.fontSize(12).text(`ថ្លៃដើមសរុប: $${totalCostAll.toFixed(2)}`, summaryStartX, y, { width: summaryWidth, align: "right" });
-        y += 50;
+        // Total quantity and cost on the right side
+        doc.fontSize(12).text(`ចំនួនទំនិញសរុប: ${totalQtyAll}`, summaryStartX, y, { width: summaryWidth, align: "right" });
+        doc.fontSize(12).text(`ថ្លៃដើមសរុប: $${totalCostAll.toFixed(2)}`, summaryStartX, y + 18, { width: summaryWidth, align: "right" });
+        y += 65;
 
         // ===== SIGNATURES =====
         const signatureY = y;
