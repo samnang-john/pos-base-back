@@ -70,6 +70,9 @@ export const generateOrderReceiptPDF = (res, order, items) => {
     y += 20;
 
     // ===== ITEMS =====
+    let totalQtyAll = 0;
+    const totalProducts = items.length;
+
     items.forEach((item, index) => {
         if (y > doc.page.height - 100) {
             doc.addPage();
@@ -78,6 +81,8 @@ export const generateOrderReceiptPDF = (res, order, items) => {
 
         const product = item.product_id;
         const productName = `${product.type_of_wood_id?.name || ""} ${product.end_grain_of_wood_id?.name || ""} x ${product.length_of_wood_id?.name || ""}`;
+
+        totalQtyAll += item.quantity || 0;
 
         const rowData = {
             no: index + 1,
@@ -99,6 +104,9 @@ export const generateOrderReceiptPDF = (res, order, items) => {
     const summaryStartX = 350;
     const summaryWidth = 215;
 
+    // Right side: subtotal, tax, grand total
+    doc.fontSize(10).text(`សរុបចំនួនដុំ: ${totalQtyAll}`, summaryStartX, y, { width: summaryWidth, align: "right" });
+    y += 15;
     doc.text(`សរុប: $${order.subtotal.toFixed(2)}`, summaryStartX, y, { width: summaryWidth, align: "right" });
     y += 15;
     doc.text(`ពន្ធ: $${order.tax.toFixed(2)}`, summaryStartX, y, { width: summaryWidth, align: "right" });
