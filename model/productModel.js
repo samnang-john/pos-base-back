@@ -1,6 +1,11 @@
 import mongoose from "mongoose";
 
 const productSchema = new mongoose.Schema({
+    category_wood_id: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "category_woods",
+        required: true,
+    },
     type_of_wood_id: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "type_of_woods",
@@ -40,6 +45,6 @@ const productSchema = new mongoose.Schema({
         type: String,
         required: false
     }
-});
+}, { timestamps: true });
 
 export default mongoose.model("products", productSchema);
