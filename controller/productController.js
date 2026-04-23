@@ -243,7 +243,7 @@ export const update = async (req, res) => {
             { new: true } 
         );
 
-        const [typeOfWoodObj, endGrainOfWoodObj, lengthOfWoodObj] = await Promise.all([
+        const [categoryWoodObj, typeOfWoodObj, endGrainOfWoodObj, lengthOfWoodObj] = await Promise.all([
             categoryWoodModel.findById(updatedProduct.category_wood_id),
             typeOfWoodModel.findById(updatedProduct.type_of_wood_id),
             endGrainOfWoodModel.findById(updatedProduct.end_grain_of_wood_id),
