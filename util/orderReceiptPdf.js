@@ -55,19 +55,21 @@ export const generateOrderReceiptPDF = (res, order, items) => {
 
     doc.moveTo(30, doc.y).lineTo(565, doc.y).stroke(); // horizontal line
 
+    const hasCubicMeters = items.some(item => item.cubic_meters !== null && item.cubic_meters !== undefined && item.cubic_meters > 0);
+
     // ===== TABLE HEADER =====
     const columns = [
         { key: "no", label: "ល.រ", x: 30, width: 30, align: "center" },
-        { key: "product", label: "មុខទំនិញ", x: 60, width: 220, align: "left" },
-        { key: "qty", label: "ចំនួន", x: 280, width: 40, align: "center" },
-        { key: "unitPrice", label: "តម្លៃ/គ្រឿង", x: 320, width: 75, align: "right" },
+        { key: "product", label: "មុខទំនិញ", x: 60, width: 200, align: "left" },
+        { key: "qty", label: "ចំនួន", x: 260, width: 60, align: "center" },
+        { key: "unitPrice", label: hasCubicMeters ? "តម្លៃ/ម៉ែត្រគូប" : "តម្លៃ/គ្រឿង", x: 320, width: 75, align: "right" },
         { key: "discount", label: "ប.តម្លៃ", x: 395, width: 75, align: "right" },
         { key: "total", label: "តម្លៃសរុប", x: 470, width: 95, align: "right" }
     ];
 
     let y = doc.y + 5;
-    drawRow(doc, y, columns, true);
-    y += 20;
+    const headerHeight = drawRow(doc, y, columns, true);
+    y += headerHeight + 5;
 
     // ===== ITEMS =====
     let totalQtyAll = 0;
@@ -80,21 +82,26 @@ export const generateOrderReceiptPDF = (res, order, items) => {
         }
 
         const product = item.product_id;
-        const productName = `${product.type_of_wood_id?.name || ""} ${product.end_grain_of_wood_id?.name || ""} x ${product.length_of_wood_id?.name || ""}`;
+        let productName;
+        if (item.cubic_meters && item.length && item.width && item.thickness) {
+            productName = `${product.type_of_wood_id?.name || ""} (${item.length}m x ${item.width}m x ${item.thickness}m)`;
+        } else {
+            productName = `${product.type_of_wood_id?.name || ""} ${product.end_grain_of_wood_id?.name || ""} x ${product.length_of_wood_id?.name || ""}`;
+        }
 
         totalQtyAll += item.quantity || 0;
 
         const rowData = {
             no: index + 1,
             product: productName,
-            qty: item.quantity,
+            qty: item.cubic_meters ? `${item.cubic_meters} គូប` : item.quantity,
             unitPrice: `$${item.price.toFixed(2)}`,
             discount: `$${(item.discount || 0).toFixed(2)}`,
             total: `$${item.total.toFixed(2)}`
         };
 
-        drawRow(doc, y, columns, false, rowData);
-        y += 20;
+        const rowHeight = drawRow(doc, y, columns, false, rowData);
+        y += rowHeight + 5;
     });
 
     doc.moveTo(30, y).lineTo(565, y).stroke();
@@ -139,8 +146,16 @@ export const generateOrderReceiptPDF = (res, order, items) => {
 
 // ===== HELPERS =====
 function drawRow(doc, y, columns, isHeader, data = {}) {
+    let maxHeight = 0;
     columns.forEach(col => {
-        const text = isHeader ? col.label : data[col.key];
-        doc.text(text, col.x, y, { width: col.width, align: col.align || "left" });
+        const rawText = isHeader ? col.label : data[col.key];
+        const text = (rawText !== undefined && rawText !== null) ? String(rawText) : "";
+        const options = { width: col.width, align: col.align || "left" };
+        const height = doc.heightOfString(text, options);
+        if (height > maxHeight) {
+            maxHeight = height;
+        }
+        doc.text(text, col.x, y, options);
     });
+    return maxHeight;
 }

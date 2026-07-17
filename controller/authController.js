@@ -3,6 +3,8 @@ import jwt from "jsonwebtoken";
 import User from "../model/userModel.js";
 import dotenv from "dotenv";
 import BlacklistedToken from "../model/blacklistModel.js";
+import RefreshToken from "../model/refreshTokenModel.js";
+import { generateTokens } from "../util/generateTokens.js";
 dotenv.config();
 
 export const login = async (req, res) => {
@@ -15,15 +17,19 @@ export const login = async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
 
-    const token = jwt.sign(
-      { userId: user._id },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || "1d" }
-    );
+    const { accessToken, refreshToken } = await generateTokens(user._id);
 
     const { password: _, ...userWithoutPassword } = user.toObject();
 
-    res.status(200).json({ user: userWithoutPassword, token });
+    res
+      .cookie("refreshToken", refreshToken, { 
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      })
+      .status(200)
+      .json({ user: userWithoutPassword, accessToken });
   } catch (error) {
     console.error("Login error:", error);
     res.status(500).json({ error: "Internal Server Error" });
@@ -42,6 +48,12 @@ export const logout = async (req, res) => {
     const expiresAt = new Date(decoded.exp * 1000);
 
     await BlacklistedToken.create({ token, expiresAt });
+
+    const refreshToken = req.cookies?.refreshToken;
+    if (refreshToken) {
+      await RefreshToken.deleteOne({ token: refreshToken });
+      res.clearCookie("refreshToken");
+    }
 
     res.status(200).json({ message: "Logout successful" });
   } catch (e) {
@@ -62,6 +74,35 @@ export const me = async (req, res) => {
     res.status(200).json(user);
   } catch (error) {
     console.error("Error fetching current user:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+export const refresh = async (req, res) => {
+  try {
+    const token = req.cookies?.refreshToken || req.body.refreshToken;
+    if (!token) return res.status(401).json({ message: "No refresh token provided" });
+
+    const stored = await RefreshToken.findOne({ token });
+    if (!stored || stored.expiresAt < new Date()) {
+      return res.status(403).json({ message: "Invalid or expired refresh token" });
+    }
+
+    // rotate: delete old, issue new pair
+    await RefreshToken.deleteOne({ _id: stored._id });
+    const { accessToken, refreshToken } = await generateTokens(stored.userId);
+
+    res
+      .cookie("refreshToken", refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      })
+      .status(200)
+      .json({ accessToken });
+  } catch (error) {
+    console.error("Refresh error:", error);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };

@@ -33,10 +33,28 @@ export const listStockSyncs = async (req, res) => {
             .limit(size)
             .select("_id sync_invoice note total_items createdAt");
 
+        // Aggregate totalCube per sync from StockSyncItem
+        const syncIds = syncs.map(s => s._id);
+        const cubeAggregation = await StockSyncItem.aggregate([
+            { $match: { sync_id: { $in: syncIds }, total_cube: { $ne: null } } },
+            { $group: { _id: "$sync_id", totalCube: { $sum: "$total_cube" } } }
+        ]);
+
+        // Build a map: sync_id -> totalCube
+        const cubeMap = {};
+        cubeAggregation.forEach(entry => {
+            cubeMap[entry._id.toString()] = entry.totalCube;
+        });
+
+        const items = syncs.map(sync => ({
+            ...sync.toObject(),
+            totalCube: cubeMap[sync._id.toString()] ?? null
+        }));
+
         res.status(200).json({
             message: "Stock sync list retrieved successfully",
             data: {
-                items: syncs,
+                items,
                 pagination: {
                     currentPage: page,
                     pageSize: size,
@@ -83,10 +101,11 @@ export const getStockSyncDetail = async (req, res) => {
                     { path: "length_of_wood_id", select: "name" }
                 ]
             })
-            .select("product_id quantity before_qty after_qty");
+            .select("product_id quantity before_qty after_qty total_cube");
 
         let total_price_of_all_items = 0;
         let total_cost_of_all_items = 0;
+        let totalCubeSum = 0;
 
         items.forEach(item => {
             const qty = item.quantity || 0;
@@ -95,12 +114,20 @@ export const getStockSyncDetail = async (req, res) => {
 
             total_price_of_all_items += qty * price;
             total_cost_of_all_items += qty * cost;
+            totalCubeSum += item.total_cube || 0;
         });
+
+        const syncObj = sync.toObject();
 
         res.status(200).json({
             message: "Stock sync detail retrieved successfully",
             data: {
-                ...sync.toObject(),
+                _id: syncObj._id,
+                sync_invoice: syncObj.sync_invoice,
+                note: syncObj.note,
+                total_items: syncObj.total_items,
+                totalCube: totalCubeSum || null,
+                createdAt: syncObj.createdAt,
                 total_price_of_all_items,
                 total_cost_of_all_items,
                 items
@@ -141,7 +168,7 @@ export const downloadStockSyncPDF = async (req, res) => {
                     { path: "length_of_wood_id", select: "name" }
                 ]
             })
-            .select("quantity before_qty after_qty product_id");
+            .select("quantity before_qty after_qty product_id total_cube");
 
         /* ===== PDF SETUP ===== */
         const doc = new PDFDocument({ size: "A4", margin: 30 });
@@ -203,6 +230,7 @@ export const downloadStockSyncPDF = async (req, res) => {
 
         let totalCostAll = 0;
         let totalQtyAll = 0;
+        let totalCubeAll = 0;
 
         /* ===== TABLE ROWS ===== */
         items.forEach((item, index) => {
@@ -214,18 +242,35 @@ export const downloadStockSyncPDF = async (req, res) => {
             const product = item.product_id;
             const productName = `${product?.type_of_wood_id?.name || ""} ${product?.end_grain_of_wood_id?.name || ""} x ${product?.length_of_wood_id?.name || ""}`;
 
-            const cost = product?.cost_of_each || 0;
             const qty = item.quantity || 0;
-            const rowTotalCost = cost * qty;
+            const totalCube = item.total_cube || null;
+
+            let costDisplay, rowTotalCost;
+
+            if (totalCube !== null) {
+                // Long category: price by cube
+                const pricePerKube = product?.price_per_kube || 0;
+                rowTotalCost = pricePerKube * totalCube;
+                costDisplay = `$${pricePerKube.toFixed(2)}/គូប`;
+            } else {
+                // Normal: price by unit
+                const cost = product?.cost_of_each || 0;
+                rowTotalCost = cost * qty;
+                costDisplay = `$${cost.toFixed(2)}`;
+            }
 
             totalCostAll += rowTotalCost;
             totalQtyAll += qty;
+            if (totalCube) totalCubeAll += totalCube;
+
+            // Display totalCube in qty column if available, otherwise display qty
+            const qtyDisplay = totalCube !== null ? `${totalCube} គូប` : qty;
 
             const rowData = {
                 no: index + 1,
                 product: productName.trim() === "x" ? "-" : productName,
-                qty: qty,
-                cost: `$${cost.toFixed(2)}`,
+                qty: qtyDisplay,
+                cost: costDisplay,
                 total: `$${rowTotalCost.toFixed(2)}`
             };
 
@@ -245,7 +290,8 @@ export const downloadStockSyncPDF = async (req, res) => {
         doc.text(`ចំណាំ: ${sync.note || "-"}`, 30, y + 15, { width: 300, align: "left" });
 
         // Total quantity and cost on the right side
-        doc.fontSize(12).text(`ចំនួនទំនិញសរុប: ${totalQtyAll}`, summaryStartX, y, { width: summaryWidth, align: "right" });
+        const qtyOrCubeSummary = totalCubeAll > 0 ? `${totalCubeAll.toFixed(3)} m³` : totalQtyAll;
+        doc.fontSize(12).text(`ចំនួនទំនិញសរុប: ${qtyOrCubeSummary}`, summaryStartX, y, { width: summaryWidth, align: "right" });
         doc.fontSize(12).text(`ថ្លៃដើមសរុប: $${totalCostAll.toFixed(2)}`, summaryStartX, y + 18, { width: summaryWidth, align: "right" });
         y += 65;
 

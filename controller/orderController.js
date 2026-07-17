@@ -40,6 +40,10 @@ export const createOrder = async (req, res) => {
             }
 
             const itemDiscount = item.discount || 0;
+            const cubicMeters = item.cubic_meters || null;
+            const length = item.length || null;
+            const width = item.width || null;
+            const thickness = item.thickness || null;
 
             const product = await Products.findOneAndUpdate(
                 {
@@ -58,15 +62,36 @@ export const createOrder = async (req, res) => {
                 );
             }
 
-            const price = product.price_of_each;
             const cost = product.cost_of_each;
-            const total = price * item.quantity - itemDiscount;
+
+            let price;
+            let total;
+
+            if (cubicMeters) {
+                // Priced by volume: price_per_kube * cubic_meters
+                if (!product.price_per_kube) {
+                    throw new Error(
+                        `Product ${item.product_id} has no price_per_kube set, cannot price by cubic meters`
+                    );
+                }
+
+                price = product.price_per_kube;
+                total = (price * cubicMeters) - itemDiscount;
+            } else {
+                // Default: priced by unit count
+                price = product.price_of_each;
+                total = (price * item.quantity) - itemDiscount;
+            }
 
             subtotal += total;
 
             orderItemsToInsert.push({
                 product_id: product._id,
                 quantity: item.quantity,
+                cubic_meters: cubicMeters,
+                length,
+                width,
+                thickness,
                 price,
                 cost,
                 discount: itemDiscount,
@@ -104,10 +129,15 @@ export const createOrder = async (req, res) => {
         await session.commitTransaction();
         session.endSession();
 
+        const itemsWithCube = formattedItems.map(item => ({
+            ...item,
+            cube: item.cubic_meters
+        }));
+
         return res.status(201).json({
             message: "Order created successfully",
             order,
-            items: formattedItems
+            items: itemsWithCube
         });
     } catch (error) {
         await session.abortTransaction();
@@ -162,11 +192,19 @@ export const listOrders = async (req, res) => {
             }
         ]);
 
+        const ordersWithCube = orders.map(order => ({
+            ...order,
+            items: (order.items || []).map(item => ({
+                ...item,
+                cube: item.cubic_meters
+            }))
+        }));
+
         res.status(200).json({
             message: "Order list retrieved successfully",
             code: 200,
             data: {
-                items: orders,
+                items: ordersWithCube,
                 pagination: {
                     currentPage: page,
                     pageSize: size,
@@ -229,13 +267,21 @@ export const getOrderDetail = async (req, res) => {
                 ]
             });
 
+        const itemsWithCube = items.map(item => {
+            const itemObj = item.toObject();
+            return {
+                ...itemObj,
+                cube: item.cubic_meters
+            };
+        });
+
         // ✅ Success response
         res.status(200).json({
             message: "Order detail retrieved successfully",
             code: 200,
             data: {
                 order,
-                items
+                items: itemsWithCube
             }
         });
 
@@ -425,18 +471,47 @@ export const syncStock = async (req, res) => {
 
         for (const item of items) {
 
-            const product = await Products.findById(item.product_id).session(session);
+            const product = await Products.findById(item.product_id)
+                .populate("category_id")
+                .session(session);
 
             if (!product) {
-                throw new Error(`Product not found: ${item.product_id}`);
+                const err = new Error(`Product not found: ${item.product_id}`);
+                err.status = 404;
+                throw err;
+            }
+
+            const isLongCategory = product.category_id && 
+                (product.category_id.name === "Long" || product.category_id.name.toLowerCase() === "long");
+
+            let totalCube = null;
+            if (isLongCategory) {
+                const totalCubeVal = item.totalCube !== undefined ? item.totalCube : item.total_cube;
+                if (totalCubeVal === undefined || totalCubeVal === null) {
+                    const err = new Error(`totalCube is required for product in category 'Long' (product_id: ${item.product_id})`);
+                    err.status = 400;
+                    throw err;
+                }
+                totalCube = Number(totalCubeVal);
+                if (isNaN(totalCube) || totalCube <= 0) {
+                    const err = new Error(`totalCube must be a positive number for product in category 'Long' (product_id: ${item.product_id})`);
+                    err.status = 400;
+                    throw err;
+                }
             }
 
             const beforeQty = product.number_of_wood;
             const afterQty = beforeQty + item.quantity;
 
+            // Build the update — always increment quantity, optionally increment total_cube for Long category
+            const productUpdate = { $inc: { number_of_wood: item.quantity } };
+            if (isLongCategory && totalCube !== null) {
+                productUpdate.$inc.total_cube = totalCube;
+            }
+
             await Products.updateOne(
                 { _id: item.product_id },
-                { $inc: { number_of_wood: item.quantity } },
+                productUpdate,
                 { session }
             );
 
@@ -445,18 +520,31 @@ export const syncStock = async (req, res) => {
                 product_id: item.product_id,
                 quantity: item.quantity,
                 before_qty: beforeQty,
-                after_qty: afterQty
+                after_qty: afterQty,
+                total_cube: totalCube
             });
         }
 
-        await StockSyncItem.insertMany(syncItems, { session });
+        const insertedItems = await StockSyncItem.insertMany(syncItems, { session });
 
         await session.commitTransaction();
         session.endSession();
 
+        const totalCubeSum = insertedItems.reduce((sum, i) => sum + (i.total_cube || 0), 0);
+
         return res.status(201).json({
             message: "Stock synced successfully",
-            data: sync
+            data: {
+                ...sync.toObject(),
+                totalCube: totalCubeSum || null,
+                items: insertedItems.map(i => ({
+                    product_id: i.product_id,
+                    quantity: i.quantity,
+                    before_qty: i.before_qty,
+                    after_qty: i.after_qty,
+                    total_cube: i.total_cube
+                }))
+            }
         });
 
     } catch (error) {
@@ -466,7 +554,7 @@ export const syncStock = async (req, res) => {
 
         console.error("Sync stock error:", error);
 
-        return res.status(500).json({
+        return res.status(error.status || 500).json({
             message: error.message || "Failed to sync stock"
         });
     }

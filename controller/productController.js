@@ -4,10 +4,12 @@ import productModel from "../model/productModel.js";
 import typeOfWoodModel from "../model/typeOfWoodModel.js";
 import endGrainOfWoodModel from "../model/endGrainOfWoodModel.js";
 import lengthOfWoodModel from "../model/lengthOfWoodModel.js";
+import categoryModel from "../model/categoryModel.js";
 
 export const create = async (req, res) => {
   try {
     const { 
+      category_id,
       type_of_wood_id,
       end_grain_of_wood_id,
       length_of_wood_id,
@@ -16,6 +18,7 @@ export const create = async (req, res) => {
       total_price_of_wood,
       price_of_each,
       car_fee,
+      price_per_kube
     } = req.body;
 
     const image = req.file
@@ -27,6 +30,7 @@ export const create = async (req, res) => {
     }
 
     const product = new productModel({
+      category_id,
       type_of_wood_id,
       end_grain_of_wood_id,
       length_of_wood_id,
@@ -35,16 +39,19 @@ export const create = async (req, res) => {
       total_price_of_wood,
       price_of_each,
       car_fee,
+      price_per_kube,
       image
     });
 
     const savedProduct = await product.save();
+    const category = await categoryModel.findById(category_id);
     const typeOfWood = await typeOfWoodModel.findById(type_of_wood_id);
     const endGrainOfWood = await endGrainOfWoodModel.findById(end_grain_of_wood_id);
     const lengthOfWood = await lengthOfWoodModel.findById(length_of_wood_id);
 
     const responseData = {
       ...savedProduct._doc,
+      category_object: category || null,
       type_of_wood_object: typeOfWood || null,
       end_grain_of_wood_object: endGrainOfWood || null,
       length_of_wood_object: lengthOfWood || null,
@@ -69,24 +76,32 @@ export const list = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const size = parseInt(req.query.size) || 10;
+    const { category_id } = req.query;
 
-    const totalItems = await productModel.countDocuments();
+    const filter = {};
+    if (category_id) {
+      filter.category_id = category_id;
+    }
+
+    const totalItems = await productModel.countDocuments(filter);
     const skip = (page - 1) * size;
 
     const products = await productModel
-      .find()
+      .find(filter)
       .skip(skip)
       .limit(size)
       .sort({ createdAt: -1 });
 
     const enrichedProducts = await Promise.all(
       products.map(async (p) => {
+        const category = await categoryModel.findById(p.category_id);
         const typeOfWood = await typeOfWoodModel.findById(p.type_of_wood_id);
         const endGrainOfWood = await endGrainOfWoodModel.findById(p.end_grain_of_wood_id);
         const lengthOfWood = await lengthOfWoodModel.findById(p.length_of_wood_id);
 
         return {
           ...p._doc,
+          category_object: category || null,
           type_of_wood_Object: typeOfWood || null,
           end_grain_of_wood_Object: endGrainOfWood || null,
           length_of_wood_Object: lengthOfWood || null,
@@ -130,19 +145,21 @@ export const detail = async (req, res) => {
       });
     }
 
+    const category = await categoryModel.findById(product.category_id);
     const typeOfWood = await typeOfWoodModel.findById(product.type_of_wood_id);
     const endGrainOfWood = await endGrainOfWoodModel.findById(product.end_grain_of_wood_id);
     const lengthOfWood = await lengthOfWoodModel.findById(product.length_of_wood_id);
 
     const responseData = {
       ...product._doc,
+      category_object: category || null,
       type_of_wood_Object: typeOfWood || null,
       end_grain_of_wood_Object: endGrainOfWood || null,
       length_of_wood_Object: lengthOfWood || null,
     };
 
     res.status(200).json({
-      message: "Product detail received successfully",
+      message: "Product detail received successfully", 
       code: 200,
       data: responseData,
     });
@@ -160,6 +177,7 @@ export const update = async (req, res) => {
     try {
         const { id } = req.params;
         const {
+            category_id,
             type_of_wood_id,
             end_grain_of_wood_id,
             length_of_wood_id,
@@ -168,6 +186,7 @@ export const update = async (req, res) => {
             total_price_of_wood,
             price_of_each,
             car_fee,
+            price_per_kube
         } = req.body;
 
         const existingProduct = await productModel.findById(id);
@@ -195,6 +214,7 @@ export const update = async (req, res) => {
         const updatedProduct = await productModel.findByIdAndUpdate(
             id,
             {
+                category_id,
                 type_of_wood_id,
                 end_grain_of_wood_id,
                 length_of_wood_id,
@@ -203,12 +223,14 @@ export const update = async (req, res) => {
                 total_price_of_wood,
                 price_of_each,
                 car_fee,
+                price_per_kube,
                 image,
             },
             { new: true } 
         );
 
-        const [typeOfWoodObj, endGrainOfWoodObj, lengthOfWoodObj] = await Promise.all([
+        const [categoryObject,typeOfWoodObj, endGrainOfWoodObj, lengthOfWoodObj] = await Promise.all([
+            categoryModel.findById(updatedProduct.category_id),
             typeOfWoodModel.findById(updatedProduct.type_of_wood_id),
             endGrainOfWoodModel.findById(updatedProduct.end_grain_of_wood_id),
             lengthOfWoodModel.findById(updatedProduct.length_of_wood_id),
@@ -219,6 +241,7 @@ export const update = async (req, res) => {
             code: 200,
             data: {
                 ...updatedProduct.toObject(),
+                category_object: categoryObject,
                 type_of_wood_Object: typeOfWoodObj,
                 end_grain_of_wood_Object: endGrainOfWoodObj,
                 length_of_wood_Object: lengthOfWoodObj,

@@ -14,6 +14,7 @@ import orderRoute from "./route/orderRoute.js";
 import syncStockRoute from "./route/syncStockRoute.js";
 import reportRoute from "./route/reportRoute.js";
 import { authenticate } from "./middleware/authMiddleware.js";
+import categoryRoute from "./route/categoryRoute.js";
 
 const app = express();
 dotenv.config();
@@ -59,6 +60,7 @@ app.use("/api/user", authenticate, userRoute);
 app.use("/api/order", authenticate, orderRoute);
 app.use("/api/stock", authenticate, syncStockRoute);
 app.use("/api/report", authenticate, reportRoute);
+app.use("/api/category", authenticate, categoryRoute);
 
 /* =======================
    SERVER + DB

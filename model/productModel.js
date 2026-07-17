@@ -1,6 +1,11 @@
 import mongoose from "mongoose";
 
 const productSchema = new mongoose.Schema({
+    category_id: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "category",
+        required: true
+    },
     type_of_wood_id: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "type_of_woods",
@@ -39,6 +44,15 @@ const productSchema = new mongoose.Schema({
     image: {
         type: String,
         required: false
+    },
+    price_per_kube: {
+        type: Number,
+        required: false
+    },
+    total_cube: {
+        type: Number,
+        required: false,
+        default: null
     }
 });
 

@@ -23,6 +23,11 @@ const stockSyncItemSchema = new mongoose.Schema({
     after_qty: {
         type: Number,
         required: true
+    },
+    total_cube: {
+        type: Number,
+        required: false,
+        default: null
     }
 }, {
     timestamps: true

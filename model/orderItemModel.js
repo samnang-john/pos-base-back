@@ -15,6 +15,26 @@ const orderItemSchema = new mongoose.Schema({
         type: Number,
         required: true,
     },
+    cubic_meters: {
+        type: Number,
+        required: false, // only set when this item is priced by volume
+        default: null
+    },
+    length: {
+        type: Number,
+        required: false,
+        default: null
+    },
+    width: {
+        type: Number,
+        required: false,
+        default: null
+    },
+    thickness: {
+        type: Number,
+        required: false,
+        default: null
+    },
     price: {
         type: Number,
         required: true,
