@@ -18,7 +18,9 @@ export const create = async (req, res) => {
       total_price_of_wood,
       price_of_each,
       car_fee,
-      price_per_kube
+      price_per_kube,
+      cost_per_kube,
+      total_cube
     } = req.body;
 
     const image = req.file
@@ -40,6 +42,8 @@ export const create = async (req, res) => {
       price_of_each,
       car_fee,
       price_per_kube,
+      cost_per_kube,
+      total_cube,
       image
     });
 
@@ -186,7 +190,9 @@ export const update = async (req, res) => {
             total_price_of_wood,
             price_of_each,
             car_fee,
-            price_per_kube
+            price_per_kube,
+            cost_per_kube,
+            total_cube
         } = req.body;
 
         const existingProduct = await productModel.findById(id);
@@ -224,6 +230,8 @@ export const update = async (req, res) => {
                 price_of_each,
                 car_fee,
                 price_per_kube,
+                cost_per_kube,
+                total_cube,
                 image,
             },
             { new: true } 

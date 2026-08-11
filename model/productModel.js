@@ -9,43 +9,47 @@ const productSchema = new mongoose.Schema({
     type_of_wood_id: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "type_of_woods",
-        required: true,
+        required: false,
     },
     end_grain_of_wood_id: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "end_grain_of_woods",
-        required: true
+        required: false
     },
     length_of_wood_id: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "length_of_woods",
-        required: true
+        required: false
     },
     cost_of_each: {
         type: Number,
-        required: true,
+        required: false,
     },
     number_of_wood: {
         type: Number,
-        required: true
+        required: false
     },
     total_price_of_wood: {
         type: Number,
-        required: true,
+        required: false,
     },
     price_of_each: {
         type: Number,
-        required: true
+        required: false
     },
     car_fee: {
         type: Number,
-        required: true
+        required: false
     },
     image: {
         type: String,
         required: false
     },
     price_per_kube: {
+        type: Number,
+        required: false
+    },
+    cost_per_kube: {
         type: Number,
         required: false
     },
