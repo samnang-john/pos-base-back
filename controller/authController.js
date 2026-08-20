@@ -80,7 +80,7 @@ export const me = async (req, res) => {
 
 export const refresh = async (req, res) => {
   try {
-    const token = req.cookies?.refreshToken || req.body.refreshToken;
+    const token = req.cookies?.refreshToken || req.body?.refreshToken;
     if (!token) return res.status(401).json({ message: "No refresh token provided" });
 
     const stored = await RefreshToken.findOne({ token });

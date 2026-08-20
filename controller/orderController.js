@@ -35,7 +35,7 @@ export const createOrder = async (req, res) => {
         const orderItemsToInsert = [];
 
         for (const item of items) {
-            if (!item.product_id || !item.quantity) {
+            if (!item.product_id) {
                 throw new Error("Invalid item structure");
             }
 
@@ -45,21 +45,76 @@ export const createOrder = async (req, res) => {
             const width = item.width || null;
             const thickness = item.thickness || null;
 
-            const product = await Products.findOneAndUpdate(
-                {
-                    _id: item.product_id,
-                    number_of_wood: { $gte: item.quantity }
-                },
-                {
-                    $inc: { number_of_wood: -item.quantity }
-                },
-                { new: true, session }
-            );
+            // Look up product + category first so we know which stock field to validate/decrement
+            const productCheck = await Products.findById(item.product_id)
+                .populate("category_id")
+                .session(session);
 
-            if (!product) {
-                throw new Error(
-                    `Not enough stock or product not found: ${item.product_id}`
+            if (!productCheck) {
+                throw new Error(`Product not found: ${item.product_id}`);
+            }
+
+            const categoryName = productCheck.category_id?.name || "";
+            const isLongCategory = categoryName.toLowerCase().includes("long");
+
+            let product;
+
+            if (isLongCategory) {
+                // ===== Validate cubic meters for Long category =====
+                if (cubicMeters === null || isNaN(cubicMeters) || cubicMeters <= 0) {
+                    throw new Error(
+                        `cubic_meters is required and must be greater than 0 for product in category 'Long' (product_id: ${item.product_id})`
+                    );
+                }
+
+                if (!productCheck.price_per_kube) {
+                    throw new Error(
+                        `Product ${item.product_id} has no price_per_kube set, cannot price by cubic meters`
+                    );
+                }
+
+                // Deduct stock from total_cube, guarded so it can't go negative
+                product = await Products.findOneAndUpdate(
+                    {
+                        _id: item.product_id,
+                        total_cube: { $gte: cubicMeters }
+                    },
+                    {
+                        $inc: { total_cube: -cubicMeters }
+                    },
+                    { new: true, session }
                 );
+
+                if (!product) {
+                    throw new Error(
+                        `Not enough cube stock for product: ${item.product_id}`
+                    );
+                }
+            } else {
+                // ===== Validate quantity for non-Long category =====
+                if (!item.quantity || isNaN(item.quantity) || item.quantity <= 0) {
+                    throw new Error(
+                        `quantity is required and must be greater than 0 for product: ${item.product_id}`
+                    );
+                }
+
+                // Deduct stock from number_of_wood, guarded so it can't go negative
+                product = await Products.findOneAndUpdate(
+                    {
+                        _id: item.product_id,
+                        number_of_wood: { $gte: item.quantity }
+                    },
+                    {
+                        $inc: { number_of_wood: -item.quantity }
+                    },
+                    { new: true, session }
+                );
+
+                if (!product) {
+                    throw new Error(
+                        `Not enough stock or product not found: ${item.product_id}`
+                    );
+                }
             }
 
             const cost = product.cost_of_each;
@@ -67,14 +122,8 @@ export const createOrder = async (req, res) => {
             let price;
             let total;
 
-            if (cubicMeters) {
+            if (isLongCategory) {
                 // Priced by volume: price_per_kube * cubic_meters
-                if (!product.price_per_kube) {
-                    throw new Error(
-                        `Product ${item.product_id} has no price_per_kube set, cannot price by cubic meters`
-                    );
-                }
-
                 price = product.price_per_kube;
                 total = (price * cubicMeters) - itemDiscount;
             } else {
@@ -87,7 +136,9 @@ export const createOrder = async (req, res) => {
 
             orderItemsToInsert.push({
                 product_id: product._id,
-                quantity: item.quantity,
+                // Long items are priced/tracked by cubic_meters, not quantity —
+                // default to 0 so it still satisfies the schema's `required` quantity field
+                quantity: isLongCategory ? (item.quantity || 0) : item.quantity,
                 cubic_meters: cubicMeters,
                 length,
                 width,

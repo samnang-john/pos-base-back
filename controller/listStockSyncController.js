@@ -249,7 +249,7 @@ export const downloadStockSyncPDF = async (req, res) => {
 
             if (totalCube !== null) {
                 // Long category: price by cube
-                const pricePerKube = product?.price_per_kube || 0;
+                const pricePerKube = product?.cost_per_kube || 0;
                 rowTotalCost = pricePerKube * totalCube;
                 costDisplay = `$${pricePerKube.toFixed(2)}/គូប`;
             } else {

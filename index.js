@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import bodyParser from "body-parser";
 import dotenv from "dotenv";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 
 import route from "./route/typeOfWoodRoute.js";
 import endGrainOfWoodRoute from "./route/endGrainOfWoodRoute.js";
@@ -44,6 +45,7 @@ app.use(cors({
 /* =======================
    MIDDLEWARE
 ======================= */
+app.use(cookieParser());
 app.use(bodyParser.json());
 app.use("/uploads", express.static("public/upload"));
 
