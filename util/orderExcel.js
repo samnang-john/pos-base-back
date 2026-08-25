@@ -46,7 +46,7 @@ export const generateOrderReportExcel = async (res, orders, filters) => {
         { key: "no", width: 6 },
         { key: "invoice", width: 18 },
         { key: "customer", width: 20 },
-        { key: "items", width: 10 },
+        { key: "items", width: 18 }, // widened to fit "3ដុំ + 0.03m³"
         { key: "subtotal", width: 15 },
         { key: "discount", width: 15 },
         { key: "total", width: 15 },
@@ -81,17 +81,17 @@ export const generateOrderReportExcel = async (res, orders, filters) => {
     let grandTotal = 0;
 
     orders.forEach((order, index) => {
-        const itemsCount = order.items.reduce((sum, item) => sum + item.quantity, 0);
+        const itemsDisplay = formatItemsSummary(order.items);
         grandTotal += order.grand_total;
 
         const row = worksheet.addRow({
             no: index + 1,
             invoice: order.order_number,
             customer: order.customer || "-",
-            items: itemsCount,
-            subtotal: `$${order.subtotal}`,
-            discount: `$${order.discount}`,
-            total: `$${order.grand_total}`,
+            items: itemsDisplay,
+            subtotal: `$${order.subtotal.toFixed(2)}`,
+            discount: `$${order.discount.toFixed(2)}`,
+            total: `$${order.grand_total.toFixed(2)}`,
             date: new Date(order.order_date).toLocaleDateString()
         });
 
@@ -127,3 +127,25 @@ export const generateOrderReportExcel = async (res, orders, filters) => {
     await workbook.xlsx.write(res);
     res.end();
 };
+
+// ================= FORMAT ITEMS SUMMARY =================
+// Separates unit-count items (pieces) from volume-priced (kube) items
+// so a 3-piece order + a 0.03m³ order never gets summed into a misleading "4".
+function formatItemsSummary(items) {
+    let unitQty = 0;
+    let cubeTotal = 0;
+
+    items.forEach(item => {
+        if (item.cubic_meters && item.cubic_meters > 0) {
+            cubeTotal += item.cubic_meters;
+        } else {
+            unitQty += item.quantity || 0;
+        }
+    });
+
+    const parts = [];
+    if (unitQty > 0) parts.push(`${unitQty}ដុំ`);
+    if (cubeTotal > 0) parts.push(`${cubeTotal.toFixed(2)}m³`);
+
+    return parts.length ? parts.join(" + ") : "-";
+}

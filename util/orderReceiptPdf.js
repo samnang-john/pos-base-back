@@ -84,7 +84,7 @@ export const generateOrderReceiptPDF = (res, order, items) => {
         const product = item.product_id;
         let productName;
         if (item.cubic_meters && item.length && item.width && item.thickness) {
-            productName = `${product.type_of_wood_id?.name || ""} (${item.length}m x ${item.width}m x ${item.thickness}m)`;
+            productName = `${product.type_of_wood_id?.name || ""} (${item.length} x ${item.width} x ${item.thickness})`;
         } else {
             productName = `${product.type_of_wood_id?.name || ""} ${product.end_grain_of_wood_id?.name || ""} x ${product.length_of_wood_id?.name || ""}`;
         }

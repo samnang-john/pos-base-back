@@ -31,7 +31,8 @@ export const createOrder = async (req, res) => {
             return res.status(400).json({ message: "Order items are required" });
         }
 
-        let subtotal = 0;
+        let subtotal = 0;          // sum of pre-discount line totals
+        let itemsDiscountSum = 0;  // sum of all item-level discounts
         const orderItemsToInsert = [];
 
         for (const item of items) {
@@ -45,7 +46,6 @@ export const createOrder = async (req, res) => {
             const width = item.width || null;
             const thickness = item.thickness || null;
 
-            // Look up product + category first so we know which stock field to validate/decrement
             const productCheck = await Products.findById(item.product_id)
                 .populate("category_id")
                 .session(session);
@@ -60,7 +60,6 @@ export const createOrder = async (req, res) => {
             let product;
 
             if (isLongCategory) {
-                // ===== Validate cubic meters for Long category =====
                 if (cubicMeters === null || isNaN(cubicMeters) || cubicMeters <= 0) {
                     throw new Error(
                         `cubic_meters is required and must be greater than 0 for product in category 'Long' (product_id: ${item.product_id})`
@@ -73,7 +72,6 @@ export const createOrder = async (req, res) => {
                     );
                 }
 
-                // Deduct stock from total_cube, guarded so it can't go negative
                 product = await Products.findOneAndUpdate(
                     {
                         _id: item.product_id,
@@ -91,14 +89,12 @@ export const createOrder = async (req, res) => {
                     );
                 }
             } else {
-                // ===== Validate quantity for non-Long category =====
                 if (!item.quantity || isNaN(item.quantity) || item.quantity <= 0) {
                     throw new Error(
                         `quantity is required and must be greater than 0 for product: ${item.product_id}`
                     );
                 }
 
-                // Deduct stock from number_of_wood, guarded so it can't go negative
                 product = await Products.findOneAndUpdate(
                     {
                         _id: item.product_id,
@@ -120,24 +116,24 @@ export const createOrder = async (req, res) => {
             const cost = product.cost_of_each;
 
             let price;
-            let total;
+            let lineSubtotal; // pre-discount line amount
+            let total;        // post-discount line amount (what's actually charged)
 
             if (isLongCategory) {
-                // Priced by volume: price_per_kube * cubic_meters
                 price = product.price_per_kube;
-                total = (price * cubicMeters) - itemDiscount;
+                lineSubtotal = round2(price * cubicMeters);
+                total = round2(lineSubtotal - itemDiscount);
             } else {
-                // Default: priced by unit count
                 price = product.price_of_each;
-                total = (price * item.quantity) - itemDiscount;
+                lineSubtotal = round2(price * item.quantity);
+                total = round2(lineSubtotal - itemDiscount);
             }
 
-            subtotal += total;
+            subtotal += lineSubtotal;
+            itemsDiscountSum += itemDiscount;
 
             orderItemsToInsert.push({
                 product_id: product._id,
-                // Long items are priced/tracked by cubic_meters, not quantity —
-                // default to 0 so it still satisfies the schema's `required` quantity field
                 quantity: isLongCategory ? (item.quantity || 0) : item.quantity,
                 cubic_meters: cubicMeters,
                 length,
@@ -150,10 +146,14 @@ export const createOrder = async (req, res) => {
             });
         }
 
-        // ===== Generate sequential invoice number =====
+        subtotal = round2(subtotal);
+
+        // Total discount = order-level discount (from req.body) + sum of item discounts
+        const totalDiscount = round2((discount || 0) + itemsDiscountSum);
+
         const orderNumber = await getNextInvoiceNumber(session);
 
-        const grandTotal = subtotal - discount + tax;
+        const grandTotal = round2(subtotal - totalDiscount + tax);
 
         const [order] = await Orders.create(
             [
@@ -161,7 +161,7 @@ export const createOrder = async (req, res) => {
                     order_number: orderNumber,
                     customer,
                     subtotal,
-                    discount,
+                    discount: totalDiscount,
                     tax,
                     grand_total: grandTotal,
                     payment_status: "paid"
@@ -610,3 +610,5 @@ export const syncStock = async (req, res) => {
         });
     }
 };
+
+const round2 = (num) => Math.round((num + Number.EPSILON) * 100) / 100;

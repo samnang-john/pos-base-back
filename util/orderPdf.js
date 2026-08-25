@@ -10,7 +10,6 @@ export const generateOrderReportPDF = (res, orders, filters) => {
         "attachment; filename=order-report.pdf"
     );
 
-    // ===== REGISTER FONT =====
     const fontPath = "assets/fonts/KhmerSangamMN.ttf";
     doc.registerFont("Khmer", fontPath);
 
@@ -72,21 +71,14 @@ export const generateOrderReportPDF = (res, orders, filters) => {
     // ================= TABLE =================
 
     const columns = [
-        { key: "no", label: "ល.រ", x: 30, width: 40, align: "center" },
-
-        { key: "invoice", label: "លេខវិក្កយបត្រ", x: 70, width: 70, align: "left" },
-
-        { key: "customer", label: "អតិថិជន", x: 140, width: 90, align: "left" },
-
-        { key: "items", label: "ចំនួន", x: 230, width: 50, align: "center" },
-
-        { key: "subtotal", label: "សរុប", x: 280, width: 70, align: "left" },
-
-        { key: "discount", label: "បញ្ចុះតម្លៃ", x: 350, width: 65, align: "left" },
-
-        { key: "total", label: "សរុបចុងក្រោយ", x: 415, width: 80, align: "left" },
- 
-        { key: "date", label: "កាលបរិច្ឆេទ", x: 495, width: 70, align: "center" }
+        { key: "no", label: "ល.រ", x: 30, width: 35, align: "center" },
+        { key: "invoice", label: "លេខវិក្កយបត្រ", x: 65, width: 65, align: "left" },
+        { key: "customer", label: "អតិថិជន", x: 130, width: 80, align: "left" },
+        { key: "items", label: "ចំនួន", x: 210, width: 75, align: "center" }, // widened for combined text
+        { key: "subtotal", label: "សរុប", x: 285, width: 65, align: "left" },
+        { key: "discount", label: "បញ្ចុះតម្លៃ", x: 350, width: 60, align: "left" },
+        { key: "total", label: "សរុបចុងក្រោយ", x: 410, width: 80, align: "left" },
+        { key: "date", label: "កាលបរិច្ឆេទ", x: 490, width: 75, align: "center" }
     ];
 
     const rowHeight = 22;
@@ -107,19 +99,16 @@ export const generateOrderReportPDF = (res, orders, filters) => {
             y += rowHeight;
         }
 
-        const itemsCount = order.items.reduce(
-            (sum, item) => sum + item.quantity,
-            0
-        );
+        const itemsDisplay = formatItemsSummary(order.items);
 
         const rowData = {
             no: index + 1,
             invoice: order.order_number,
             customer: order.customer || "-",
-            items: itemsCount,
-            subtotal: `$${order.subtotal}`,
-            discount: `$${order.discount}`,
-            total: `$${order.grand_total}`,
+            items: itemsDisplay,
+            subtotal: `$${order.subtotal.toFixed(2)}`,
+            discount: `$${order.discount.toFixed(2)}`,
+            total: `$${order.grand_total.toFixed(2)}`,
             date: new Date(order.order_date).toLocaleDateString()
         };
 
@@ -137,7 +126,7 @@ export const generateOrderReportPDF = (res, orders, filters) => {
     doc.fontSize(10);
     doc.text(`ចំនួនការបញ្ជាទិញសរុប: ${orders.length}`, 440, y);
 
-    y += 17; 
+    y += 17;
 
     doc.fontSize(12).text(
         `សរុបទឹកប្រាក់: $${grandTotal.toFixed(2)}`,
@@ -147,6 +136,28 @@ export const generateOrderReportPDF = (res, orders, filters) => {
 
     doc.end();
 };
+
+// ================= FORMAT ITEMS SUMMARY =================
+// Separates unit-count items (e.g. pieces) from volume-priced (kube) items
+// so they're never summed together into one misleading number.
+function formatItemsSummary(items) {
+    let unitQty = 0;
+    let cubeTotal = 0;
+
+    items.forEach(item => {
+        if (item.cubic_meters && item.cubic_meters > 0) {
+            cubeTotal += item.cubic_meters;
+        } else {
+            unitQty += item.quantity || 0;
+        }
+    });
+
+    const parts = [];
+    if (unitQty > 0) parts.push(`${unitQty}ដុំ`);
+    if (cubeTotal > 0) parts.push(`${cubeTotal.toFixed(2)}m`);
+
+    return parts.length ? parts.join(" + ") : "-";
+}
 
 // ================= DRAW ROW =================
 
@@ -163,12 +174,12 @@ function drawRow(doc, y, rowHeight, columns, isHeader, data = {}) {
             doc.rect(col.x, y, col.width, rowHeight).stroke();
         }
 
-        doc.fillColor("black").text(
-            text,
-            col.x + 5,
+        doc.fillColor("black").fontSize(9).text(
+            String(text),
+            col.x + 4,
             y + 6,
             {
-                width: col.width - 10,
+                width: col.width - 8,
                 align: col.align || "left",
                 ellipsis: true
             }
