@@ -6,6 +6,14 @@ import endGrainOfWoodModel from "../model/endGrainOfWoodModel.js";
 import lengthOfWoodModel from "../model/lengthOfWoodModel.js";
 import categoryModel from "../model/categoryModel.js";
 
+// helper: round a value to 2 decimal places, leaving null/undefined/invalid as-is
+const round2 = (v) => {
+  if (v === null || v === undefined || v === "") return v;
+  const num = Number(v);
+  if (isNaN(num)) return v;
+  return Math.round((num + Number.EPSILON) * 100) / 100;
+};
+
 export const create = async (req, res) => {
   try {
     const { 
@@ -43,7 +51,7 @@ export const create = async (req, res) => {
       car_fee,
       price_per_kube,
       cost_per_kube,
-      total_cube,
+      total_cube: round2(total_cube),
       image
     });
 
@@ -105,6 +113,7 @@ export const list = async (req, res) => {
 
         return {
           ...p._doc,
+          total_cube: round2(p.total_cube),
           category_object: category || null,
           type_of_wood_Object: typeOfWood || null,
           end_grain_of_wood_Object: endGrainOfWood || null,
@@ -156,6 +165,7 @@ export const detail = async (req, res) => {
 
     const responseData = {
       ...product._doc,
+      total_cube: round2(product.total_cube),
       category_object: category || null,
       type_of_wood_Object: typeOfWood || null,
       end_grain_of_wood_Object: endGrainOfWood || null,
@@ -231,7 +241,7 @@ export const update = async (req, res) => {
                 car_fee,
                 price_per_kube,
                 cost_per_kube,
-                total_cube,
+                total_cube: round2(total_cube),
                 image,
             },
             { new: true } 
@@ -249,6 +259,7 @@ export const update = async (req, res) => {
             code: 200,
             data: {
                 ...updatedProduct.toObject(),
+                total_cube: round2(updatedProduct.total_cube),
                 category_object: categoryObject,
                 type_of_wood_Object: typeOfWoodObj,
                 end_grain_of_wood_Object: endGrainOfWoodObj,
